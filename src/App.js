@@ -100,7 +100,9 @@ function WalletPanel({ onVerify }) {
   const [nftCount, setNftCount] = useState(null);
   const [lastVerifiedAt, setLastVerifiedAt] = useState(new Date().toISOString());
   const [tgId, setTgId] = useState("7761809923"); // Add Telegram ID state with user's ID
-  const [mobileWalletStatus, setMobileWalletStatus] = useState(null); // Add mobile wallet status
+  const [mobileWalletConnecting, setMobileWalletConnecting] = useState(false);
+  const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [walletType, setWalletType] = useState(""); // Add walletType state
 
   const walletAddress = publicKey ? publicKey.toBase58() : null;
 
@@ -129,10 +131,25 @@ function WalletPanel({ onVerify }) {
       console.log("💾 Auto-connect preference saved for future sessions");
       
       // Show success message when wallet connects
+      const walletName = mobileWalletConnecting ? "Mobile wallet" : "Wallet";
       setStatus({ 
         type: "success", 
-        message: `🎉 Wallet connected successfully! Address: ${shortAddress(publicKey.toBase58())}` 
+        message: `🎉 ${walletName} connected successfully! Address: ${shortAddress(publicKey.toBase58())}` 
       });
+      
+      // Reset mobile connection state
+      setMobileWalletConnecting(false);
+      setConnectionAttempts(0);
+      
+      // Show mobile-specific success message
+      if (window.navigator.userAgent.includes('Mobile')) {
+        setTimeout(() => {
+          setStatus({ 
+            type: "success", 
+            message: `🎉 Mobile wallet connected! You can now verify your NFT. Address: ${shortAddress(publicKey.toBase58())}` 
+          });
+        }, 1000);
+      }
     } else if (!connected) {
       // Show message when wallet disconnects
       setStatus({ 
@@ -140,7 +157,247 @@ function WalletPanel({ onVerify }) {
         message: "🔌 Wallet disconnected. Connect your wallet to get started." 
       });
     }
-  }, [connected, publicKey]);
+  }, [connected, publicKey, mobileWalletConnecting]);
+
+  // Mobile wallet connection handling
+  const handleMobileWalletConnection = useCallback(async (walletType) => {
+    if (mobileWalletConnecting) return;
+    
+    setWalletType(walletType); // Set the wallet type being connected
+    setMobileWalletConnecting(true);
+    setConnectionAttempts(0);
+    setStatus({ type: "info", message: `📱 Opening ${walletType} wallet...` });
+    
+    try {
+      let deepLink = '';
+      let fallbackUrl = '';
+      
+      // Generate deep links for different wallet types
+      switch (walletType.toLowerCase()) {
+        case 'phantom':
+          deepLink = `https://phantom.app/ul/browse/${encodeURIComponent(window.location.href)}`;
+          fallbackUrl = 'https://phantom.app/';
+          break;
+        case 'solflare':
+          deepLink = `https://solflare.com/ul/browse/${encodeURIComponent(window.location.href)}`;
+          fallbackUrl = 'https://solflare.com/';
+          break;
+        case 'torus':
+          deepLink = `https://app.tor.us/wallet/connect?appName=MetaBetties&appUrl=${encodeURIComponent(window.location.href)}`;
+          fallbackUrl = 'https://app.tor.us/';
+          break;
+        case 'coinbase':
+          deepLink = `https://wallet.coinbase.com/wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`;
+          fallbackUrl = 'https://wallet.coinbase.com/';
+          break;
+        default:
+          deepLink = window.location.href;
+          fallbackUrl = window.location.href;
+      }
+      
+      // Try to open wallet app with deep link
+      const linkElement = document.createElement('a');
+      linkElement.href = deepLink;
+      linkElement.target = '_blank';
+      linkElement.rel = 'noopener noreferrer';
+      
+      // For mobile, try to open the app directly
+      if (window.navigator.userAgent.includes('Mobile')) {
+        // Try to open the deep link without redirecting the page
+        try {
+          // Method 1: Try to open in new tab/window
+          const newWindow = window.open(deepLink, '_blank');
+          
+          // Method 2: If that fails, try using the link element
+          if (!newWindow || newWindow.closed) {
+            linkElement.click();
+          }
+          
+          // Method 3: As last resort, try location.href but with better handling
+          setTimeout(() => {
+            if (!connected && mobileWalletConnecting) {
+              console.log("📱 Deep link methods failed, trying alternative approach...");
+              
+              // Try alternative deep link formats
+              let alternativeLink = '';
+              switch (walletType.toLowerCase()) {
+                case 'phantom':
+                  alternativeLink = `https://phantom.app/ul/browse/${encodeURIComponent(window.location.href)}`;
+                  break;
+                case 'solflare':
+                  alternativeLink = `https://solflare.com/ul/browse/${encodeURIComponent(window.location.href)}`;
+                  break;
+                case 'torus':
+                  alternativeLink = `https://app.tor.us/wallet/connect?appName=MetaBetties&appUrl=${encodeURIComponent(window.location.href)}`;
+                  break;
+                case 'coinbase':
+                  alternativeLink = `https://wallet.coinbase.com/wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`;
+                  break;
+              }
+              
+              if (alternativeLink) {
+                window.open(alternativeLink, '_blank');
+              }
+            }
+          }, 2000);
+          
+        } catch (deepLinkError) {
+          console.warn("📱 Deep link error:", deepLinkError);
+          // Fallback to fallback URL
+          window.open(fallbackUrl, '_blank');
+        }
+        
+        // Set up a fallback timer with longer delay for mobile
+        setTimeout(() => {
+          // If still not connected after 8 seconds, show fallback options
+          if (!connected && mobileWalletConnecting) {
+            setStatus({ 
+              type: "warning", 
+              message: `⚠️ ${walletType} app not found or not responding. Opening fallback options...` 
+            });
+            
+            // Open fallback URL in new tab
+            window.open(fallbackUrl, '_blank');
+            
+            // Show manual connection instructions
+            setTimeout(() => {
+              setStatus({ 
+                type: "info", 
+                message: `📱 Please install ${walletType} app and return here to connect manually.` 
+              });
+            }, 2000);
+          }
+        }, 8000); // Increased to 8 seconds for mobile
+      } else {
+        // For desktop, open in new tab
+        linkElement.click();
+      }
+      
+      // Set up connection monitoring
+      const maxAttempts = 15; // Increased timeout for mobile
+      const checkInterval = setInterval(() => {
+        setConnectionAttempts(prev => {
+          const newAttempts = prev + 1;
+          
+          if (newAttempts >= maxAttempts) {
+            clearInterval(checkInterval);
+            setMobileWalletConnecting(false);
+            setStatus({ 
+              type: "warning", 
+              message: `⚠️ Connection timeout for ${walletType}. Please check if the app is installed and try again.` 
+            });
+            return 0;
+          }
+          
+          // Check if wallet is now connected
+          if (connected) {
+            clearInterval(checkInterval);
+            setMobileWalletConnecting(false);
+            setStatus({ 
+              type: "success", 
+              message: `🎉 ${walletType} wallet connected successfully!` 
+            });
+            return 0;
+          }
+          
+          // Update status based on attempt count
+          let statusMessage = '';
+          if (newAttempts <= 5) {
+            statusMessage = `📱 Opening ${walletType} app... (${newAttempts}/${maxAttempts})`;
+          } else if (newAttempts <= 10) {
+            statusMessage = `⏳ Waiting for ${walletType} connection... (${newAttempts}/${maxAttempts})`;
+          } else {
+            statusMessage = `⚠️ Still waiting... Check if ${walletType} app is open (${newAttempts}/${maxAttempts})`;
+          }
+          
+          setStatus({ type: "info", message: statusMessage });
+          return newAttempts;
+        });
+      }, 2000);
+      
+    } catch (error) {
+      console.error("Mobile wallet connection error:", error);
+      setMobileWalletConnecting(false);
+      setStatus({ 
+        type: "error", 
+        message: `❌ Error opening ${walletType}. Please try again or install the app first.` 
+      });
+      
+      // Show specific error messages for common issues
+      setTimeout(() => {
+        if (error.message.includes('timeout') || error.message.includes('timeout')) {
+          setStatus({ 
+            type: "warning", 
+            message: `⚠️ ${walletType} connection timed out. Please check if the app is installed and try again.` 
+          });
+        } else if (error.message.includes('not found') || error.message.includes('app not found')) {
+          setStatus({ 
+            type: "warning", 
+            message: `⚠️ ${walletType} app not found. Please install it first from the app store.` 
+          });
+        } else if (error.message.includes('blocked') || error.message.includes('popup blocked')) {
+          setStatus({ 
+            type: "warning", 
+            message: `⚠️ Popup blocked by browser. Please allow popups for this site and try again.` 
+          });
+        } else {
+          setStatus({ 
+            type: "error", 
+            message: `❌ Failed to connect to ${walletType}. Please try again or use a different wallet.` 
+          });
+        }
+      }, 2000);
+    }
+  }, [mobileWalletConnecting, connected]);
+
+  // Check for mobile wallet return
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && mobileWalletConnecting) {
+        // User returned from wallet app
+        console.log("📱 User returned from wallet app");
+        
+        // Wait a bit for wallet to initialize
+        setTimeout(() => {
+          if (connected) {
+            setMobileWalletConnecting(false);
+            setStatus({ 
+              type: "success", 
+              message: "🎉 Mobile wallet connected successfully!" 
+            });
+            
+            // Show additional success message for mobile users
+            if (window.navigator.userAgent.includes('Mobile')) {
+              setTimeout(() => {
+                setStatus({ 
+                  type: "success", 
+                  message: "🎉 Mobile wallet connected! You can now verify your NFT below." 
+                });
+              }, 2000);
+            }
+          } else {
+            setStatus({ 
+              type: "warning", 
+              message: "⚠️ Wallet not connected. Please try connecting again." 
+            });
+            
+            // Show mobile-specific troubleshooting tips
+            if (window.navigator.userAgent.includes('Mobile')) {
+              setTimeout(() => {
+                setStatus({ 
+                  type: "info", 
+                  message: "📱 Mobile connection failed. Make sure to grant permission in your wallet app and try again." 
+                });
+              }, 2000);
+            }
+          }
+        }, 2000);
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [mobileWalletConnecting, connected]);
 
   // DEVELOPER CREDIT PROTECTION - DO NOT REMOVE (SILENT)
   useEffect(() => {
@@ -195,7 +452,7 @@ function WalletPanel({ onVerify }) {
     };
   }, []);
 
-  // Mobile wallet detection and connection handling
+  // Mobile wallet detection
   useEffect(() => {
     const detectMobileWallets = () => {
       const mobileWallets = [];
@@ -241,288 +498,6 @@ function WalletPanel({ onVerify }) {
     
     detectMobileWallets();
     
-    // Handle mobile wallet return flow
-    const handleMobileWalletReturn = () => {
-      // Check if we're returning from a mobile wallet
-      const urlParams = new URLSearchParams(window.location.search);
-      const returningFromWallet = urlParams.get('wallet_return') || 
-                                  urlParams.get('return') || 
-                                  urlParams.get('from_wallet');
-      
-      if (returningFromWallet) {
-        console.log("🔄 Detected return from mobile wallet, attempting auto-connection...");
-        
-        // Show mobile wallet status
-        setMobileWalletStatus({
-          title: "Returning from Wallet App",
-          message: "Attempting to reconnect to your wallet...",
-          loading: true
-        });
-        
-        // Clear the return parameter
-        const newUrl = new URL(window.location);
-        newUrl.searchParams.delete('wallet_return');
-        newUrl.searchParams.delete('return');
-        newUrl.searchParams.delete('from_wallet');
-        window.history.replaceState({}, '', newUrl);
-        
-        // Wait a bit for wallet to be ready, then try to connect
-        setTimeout(() => {
-          try {
-            // Try to auto-connect to the detected wallet
-            if (window.solana?.isPhantom) {
-              console.log("🔄 Attempting to connect to Phantom wallet...");
-              setMobileWalletStatus({
-                title: "Connecting to Phantom",
-                message: "Establishing connection...",
-                loading: true
-              });
-              
-              window.solana.connect().then(() => {
-                console.log("✅ Successfully connected to Phantom wallet");
-                setStatus({ type: "success", message: "🎉 Mobile wallet connected successfully!" });
-                setMobileWalletStatus({
-                  title: "Connected to Phantom",
-                  message: "Wallet connection successful!",
-                  loading: false
-                });
-                
-                // Clear status after 3 seconds
-                setTimeout(() => setMobileWalletStatus(null), 3000);
-              }).catch(err => {
-                console.warn("⚠️ Failed to auto-connect to Phantom:", err);
-                setMobileWalletStatus({
-                  title: "Connection Failed",
-                  message: "Please try connecting manually",
-                  loading: false
-                });
-                
-                // Clear status after 5 seconds
-                setTimeout(() => setMobileWalletStatus(null), 5000);
-              });
-            } else if (window.solflare?.isSolflare) {
-              console.log("🔄 Attempting to connect to Solflare wallet...");
-              setMobileWalletStatus({
-                title: "Connecting to Solflare",
-                message: "Establishing connection...",
-                loading: true
-              });
-              
-              window.solflare.connect().then(() => {
-                console.log("✅ Successfully connected to Solflare wallet");
-                setStatus({ type: "success", message: "🎉 Mobile wallet connected successfully!" });
-                setMobileWalletStatus({
-                  title: "Connected to Solflare",
-                  message: "Wallet connection successful!",
-                  loading: false
-                });
-                
-                // Clear status after 3 seconds
-                setTimeout(() => setMobileWalletStatus(null), 3000);
-              }).catch(err => {
-                console.warn("⚠️ Failed to auto-connect to Solflare:", err);
-                setMobileWalletStatus({
-                  title: "Connection Failed",
-                  message: "Please try connecting manually",
-                  loading: false
-                });
-                
-                // Clear status after 5 seconds
-                setTimeout(() => setMobileWalletStatus(null), 5000);
-              });
-            } else if (window.torus) {
-              console.log("🔄 Attempting to connect to Torus wallet...");
-              setMobileWalletStatus({
-                title: "Connecting to Torus",
-                message: "Establishing connection...",
-                loading: true
-              });
-              
-              window.torus.login().then(() => {
-                console.log("✅ Successfully connected to Torus wallet");
-                setStatus({ type: "success", message: "🎉 Mobile wallet connected successfully!" });
-                setMobileWalletStatus({
-                  title: "Connected to Torus",
-                  message: "Wallet connection successful!",
-                  loading: false
-                });
-                
-                // Clear status after 3 seconds
-                setTimeout(() => setMobileWalletStatus(null), 3000);
-              }).catch(err => {
-                console.warn("⚠️ Failed to auto-connect to Torus:", err);
-                setMobileWalletStatus({
-                  title: "Connection Failed",
-                  message: "Please try connecting manually",
-                  loading: false
-                });
-                
-                // Clear status after 5 seconds
-                setTimeout(() => setMobileWalletStatus(null), 5000);
-              });
-            } else if (window.coinbaseWallet) {
-              console.log("🔄 Attempting to connect to Coinbase wallet...");
-              setMobileWalletStatus({
-                title: "Connecting to Coinbase",
-                message: "Establishing connection...",
-                loading: true
-              });
-              
-              window.coinbaseWallet.request({ method: 'eth_requestAccounts' }).then(() => {
-                console.log("✅ Successfully connected to Coinbase wallet");
-                setStatus({ type: "success", message: "🎉 Mobile wallet connected successfully!" });
-                setMobileWalletStatus({
-                  title: "Connected to Coinbase",
-                  message: "Wallet connection successful!",
-                  loading: false
-                });
-                
-                // Clear status after 3 seconds
-                setTimeout(() => setMobileWalletStatus(null), 3000);
-              }).catch(err => {
-                console.warn("⚠️ Failed to auto-connect to Coinbase:", err);
-                setMobileWalletStatus({
-                  title: "Connection Failed",
-                  message: "Please try connecting manually",
-                  loading: false
-                });
-                
-                // Clear status after 5 seconds
-                setTimeout(() => setMobileWalletStatus(null), 5000);
-              });
-            }
-          } catch (error) {
-            console.warn("⚠️ Error during mobile wallet auto-connection:", error);
-            setMobileWalletStatus({
-              title: "Connection Error",
-              message: "An error occurred during connection",
-              loading: false
-            });
-            
-            // Clear status after 5 seconds
-            setTimeout(() => setMobileWalletStatus(null), 5000);
-          }
-        }, 1000);
-      }
-    };
-    
-    // Check for mobile wallet return on page load
-    handleMobileWalletReturn();
-    
-    // Handle page visibility changes (when user switches to wallet app and back)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        // Page became visible again (user returned from wallet app)
-        console.log("🔄 Page became visible, checking for wallet connection...");
-        
-        // Wait a bit for wallet to be ready
-        setTimeout(() => {
-          if (!connected && (window.solana?.isPhantom || window.solflare?.isSolflare || window.torus || window.coinbaseWallet)) {
-            console.log("🔄 Attempting auto-connection after returning from wallet app...");
-            
-            setMobileWalletStatus({
-              title: "Returning from Wallet",
-              message: "Attempting to reconnect...",
-              loading: true
-            });
-            
-            // Try to auto-connect
-            try {
-              if (window.solana?.isPhantom) {
-                window.solana.connect().then(() => {
-                  console.log("✅ Auto-connected to Phantom after return");
-                  setMobileWalletStatus({
-                    title: "Connected to Phantom",
-                    message: "Auto-connection successful!",
-                    loading: false
-                  });
-                  setTimeout(() => setMobileWalletStatus(null), 3000);
-                }).catch(() => {
-                  setMobileWalletStatus(null);
-                });
-              } else if (window.solflare?.isSolflare) {
-                window.solflare.connect().then(() => {
-                  console.log("✅ Auto-connected to Solflare after return");
-                  setMobileWalletStatus({
-                    title: "Connected to Solflare",
-                    message: "Auto-connection successful!",
-                    loading: false
-                  });
-                  setTimeout(() => setMobileWalletStatus(null), 3000);
-                }).catch(() => {
-                  setMobileWalletStatus(null);
-                });
-              }
-            } catch (error) {
-              console.warn("⚠️ Error during auto-connection after return:", error);
-              setMobileWalletStatus(null);
-            }
-          }
-        }, 1000);
-      } else if (document.visibilityState === 'hidden') {
-        // Page became hidden (user switched to wallet app)
-        console.log("📱 Page became hidden, user likely switched to wallet app");
-        
-        // Show status that user is in wallet app
-        if (!connected && window.navigator.userAgent.includes('Mobile')) {
-          setMobileWalletStatus({
-            title: "In Wallet App",
-            message: "Complete connection in your wallet app, then return here",
-            loading: false
-          });
-        }
-      }
-    };
-    
-    // Add visibility change listener
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Handle window focus (when user returns to browser tab)
-    const handleWindowFocus = () => {
-      console.log("🔄 Window focused, checking for wallet connection...");
-      
-      // Wait a bit for wallet to be ready
-      setTimeout(() => {
-        if (!connected && (window.solana?.isPhantom || window.solflare?.isSolflare || window.torus || window.coinbaseWallet)) {
-          console.log("🔄 Attempting auto-connection after window focus...");
-          
-          try {
-            if (window.solana?.isPhantom) {
-              window.solana.connect().then(() => {
-                console.log("✅ Auto-connected to Phantom after focus");
-                setMobileWalletStatus({
-                  title: "Connected to Phantom",
-                  message: "Auto-connection successful!",
-                  loading: false
-                });
-                setTimeout(() => setMobileWalletStatus(null), 3000);
-              }).catch(() => {
-                setMobileWalletStatus(null);
-              });
-            } else if (window.solflare?.isSolflare) {
-              window.solflare.connect().then(() => {
-                console.log("✅ Auto-connected to Solflare after focus");
-                setMobileWalletStatus({
-                  title: "Connected to Solflare",
-                  message: "Auto-connection successful!",
-                  loading: false
-                });
-                setTimeout(() => setMobileWalletStatus(null), 3000);
-              }).catch(() => {
-                setMobileWalletStatus(null);
-              });
-            }
-          } catch (error) {
-            console.warn("⚠️ Error during auto-connection after focus:", error);
-            setMobileWalletStatus(null);
-          }
-        }
-      }, 1000);
-    };
-    
-    // Add window focus listener
-    window.addEventListener('focus', handleWindowFocus);
-    
     // Set up continuous monitoring for newly installed wallets
     const checkForNewWallets = () => {
       try {
@@ -547,36 +522,9 @@ function WalletPanel({ onVerify }) {
     // Check every 2 seconds for newly installed wallets
     const walletCheckInterval = setInterval(checkForNewWallets, 2000);
     
-    // Listen for wallet connection events
-    const handleWalletConnection = (event) => {
-      if (event.type === 'connect') {
-        console.log("🎉 Wallet connected via event:", event);
-        setStatus({ type: "success", message: "🎉 Mobile wallet connected successfully!" });
-        setMobileWalletStatus(null); // Clear mobile status
-      }
-    };
-    
-    // Add event listeners for wallet connections
-    if (window.solana) {
-      window.solana.on('connect', handleWalletConnection);
-    }
-    if (window.solflare) {
-      window.solflare.on('connect', handleWalletConnection);
-    }
-    
-    // Cleanup interval and event listeners on unmount
-    return () => {
-      clearInterval(walletCheckInterval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleWindowFocus);
-      if (window.solana) {
-        window.solana.off('connect', handleWalletConnection);
-      }
-      if (window.solflare) {
-        window.solflare.off('connect', handleWalletConnection);
-      }
-    };
-  }, [connected]);
+    // Cleanup interval on unmount
+    return () => clearInterval(walletCheckInterval);
+  }, []);
 
   const doVerify = useCallback(
     async (collectionId = DEFAULT_COLLECTION, tg_id = null) => {
@@ -697,8 +645,85 @@ function WalletPanel({ onVerify }) {
           )}
         </div>
         
-        {/* Mobile Wallet Instructions - REMOVED */}
-        
+        {/* Mobile Wallet Quick Connect */}
+        {!connected && window.navigator.userAgent.includes('Mobile') && (
+          <div className="mt-3 p-3 bg-green-500/20 border border-green-400/30 rounded-xl">
+            <p className="text-sm text-green-200 text-center mb-2">
+              🚀 <strong>Quick Connect:</strong> Tap your wallet below for instant connection
+            </p>
+            
+            {/* Connection Status */}
+            {mobileWalletConnecting && (
+              <div className="text-center mb-3 p-2 bg-blue-600/20 rounded-lg">
+                <div className="flex items-center justify-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-300"></div>
+                  <span className="text-xs text-blue-200">
+                    {connectionAttempts <= 5 ? 'Opening wallet...' : 
+                     connectionAttempts <= 10 ? 'Waiting for connection...' : 
+                     'Checking connection...'}
+                  </span>
+                </div>
+                <p className="text-xs text-blue-300 mt-1">
+                  {connectionAttempts <= 5 ? '�� Opening wallet app...' : 
+                   connectionAttempts <= 10 ? '⏳ Waiting for permission...' : 
+                   '⚠️ Check if app is open'}
+                </p>
+              </div>
+            )}
+            
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                onClick={() => handleMobileWalletConnection('Phantom')}
+                disabled={mobileWalletConnecting}
+                className="inline-flex items-center px-3 py-2 bg-purple-600/80 text-white text-xs rounded-lg hover:bg-purple-500/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Connect Phantom Wallet"
+              >
+                👻 Phantom
+              </button>
+              <button
+                onClick={() => handleMobileWalletConnection('Solflare')}
+                disabled={mobileWalletConnecting}
+                className="inline-flex items-center px-3 py-2 bg-orange-600/80 text-white text-xs rounded-lg hover:bg-orange-500/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Connect Solflare Wallet"
+              >
+                🔥 Solflare
+              </button>
+              <button
+                onClick={() => handleMobileWalletConnection('Torus')}
+                disabled={mobileWalletConnecting}
+                className="inline-flex items-center px-3 py-2 bg-blue-600/80 text-white text-xs rounded-lg hover:bg-blue-500/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Connect Torus Wallet"
+              >
+                🌐 Torus
+              </button>
+              <button
+                onClick={() => handleMobileWalletConnection('Coinbase')}
+                disabled={mobileWalletConnecting}
+                className="inline-flex items-center px-3 py-2 bg-green-600/80 text-white text-xs rounded-lg hover:bg-green-500/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Connect Coinbase Wallet"
+              >
+                💰 Coinbase
+              </button>
+            </div>
+            
+            {/* Quick Tips */}
+            <div className="mt-2 text-center">
+              <p className="text-xs text-green-300">
+                💡 <strong>Tip:</strong> Make sure your wallet app is installed and ready
+              </p>
+              {!mobileWalletConnecting && (
+                <p className="text-xs text-green-400 mt-1">
+                  🎯 Tap any wallet button above to start connection
+                </p>
+              )}
+              {mobileWalletConnecting && (
+                <p className="text-xs text-green-400 mt-1">
+                  🔄 Connection in progress... Please wait
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Telegram ID Input - Hidden but functional */}
@@ -723,22 +748,92 @@ function WalletPanel({ onVerify }) {
 
       {/* Status Display */}
       <StatusIndicator type={status.type} message={status.message} />
-
-      {/* Mobile Wallet Status */}
-      {mobileWalletStatus && (
-        <div className="mt-4 p-4 bg-purple-500/20 border border-purple-400/30 rounded-xl">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <span className="text-2xl">📱</span>
-              <div>
-                <p className="text-sm text-purple-200 font-medium">{mobileWalletStatus.title}</p>
-                <p className="text-xs text-purple-300">{mobileWalletStatus.message}</p>
-              </div>
+      
+      {/* Mobile Connection Status */}
+      {mobileWalletConnecting && window.navigator.userAgent.includes('Mobile') && (
+        <div className="mt-4 p-4 bg-blue-500/20 border border-blue-400/30 rounded-xl">
+          <div className="flex items-center justify-center space-x-3 mb-3">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-300"></div>
+            <span className="text-blue-200 font-medium">Connecting to Mobile Wallet...</span>
+          </div>
+          
+          <div className="text-center space-y-2">
+            <div className="text-sm text-blue-300">
+              {connectionAttempts === 0 && "📱 Opening wallet app..."}
+              {connectionAttempts > 0 && connectionAttempts <= 5 && `📱 Opening wallet app... (${connectionAttempts}/15)`}
+              {connectionAttempts > 5 && connectionAttempts <= 10 && `⏳ Waiting for connection... (${connectionAttempts}/15)`}
+              {connectionAttempts > 10 && connectionAttempts < 15 && `⚠️ Still waiting... Check if app is open (${connectionAttempts}/15)`}
+              {connectionAttempts >= 15 && "⚠️ Connection timeout. Please try again."}
             </div>
-            {mobileWalletStatus.loading && (
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-400"></div>
+            
+            {connectionAttempts > 0 && connectionAttempts < 15 && (
+              <div className="w-full bg-blue-600/30 rounded-full h-2">
+                <div 
+                  className="bg-blue-400 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${(connectionAttempts / 15) * 100}%` }}
+                ></div>
+              </div>
+            )}
+            
+            <div className="text-xs text-blue-400">
+              {connectionAttempts <= 5 && "💡 Opening wallet app..."}
+              {connectionAttempts > 5 && connectionAttempts <= 10 && "💡 Waiting for connection permission..."}
+              {connectionAttempts > 10 && "💡 Make sure to grant connection permission in your wallet app"}
+            </div>
+            
+            {/* Connection Tips */}
+            <div className="mt-3 p-2 bg-blue-600/20 rounded-lg">
+              <p className="text-xs text-blue-300 font-medium mb-1">💡 Connection Tips:</p>
+              <ul className="text-xs text-blue-400 text-left space-y-1">
+                <li>• Make sure {walletType || 'wallet'} app is installed</li>
+                <li>• Grant connection permission when prompted</li>
+                <li>• Return to this page after connecting</li>
+                <li>• If app doesn't open, try refreshing the page</li>
+                <li>• Allow popups for this website</li>
+                <li>• Check if wallet app is running in background</li>
+                <li>• Try switching between wallet apps if one fails</li>
+                <li>• Ensure stable internet connection</li>
+                <li>• Close and reopen wallet app if stuck</li>
+                <li>• Check wallet app permissions in device settings</li>
+                <li>• Restart device if connection issues persist</li>
+                <li>• Use different browser if Chrome/Safari fails</li>
+              </ul>
+            </div>
+            
+            {/* Success indicator when connected */}
+            {connected && (
+              <div className="mt-2 p-2 bg-green-600/20 border border-green-400/30 rounded-lg">
+                <div className="flex items-center justify-center space-x-2">
+                  <span className="text-green-400">✅</span>
+                  <span className="text-green-200 text-sm font-medium">Wallet Connected Successfully!</span>
+                </div>
+                <p className="text-xs text-green-300 mt-1">
+                  You can now proceed with NFT verification below
+                </p>
+              </div>
             )}
           </div>
+          
+          {connectionAttempts >= 15 && (
+            <div className="flex justify-center mt-3 space-x-2">
+              <button
+                onClick={() => {
+                  setMobileWalletConnecting(false);
+                  setConnectionAttempts(0);
+                  setStatus({ type: "info", message: "🔗 Ready to connect. Try again with any wallet button above." });
+                }}
+                className="inline-flex items-center px-3 py-1 bg-blue-600/80 text-white text-xs rounded-lg hover:bg-blue-500/80 transition-colors"
+              >
+                🔄 Reset Connection
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center px-3 py-1 bg-green-600/80 text-white text-xs rounded-lg hover:bg-green-500/80 transition-colors"
+              >
+                🔄 Refresh Page
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -784,6 +879,164 @@ function WalletPanel({ onVerify }) {
           )}
         </button>
       </div>
+      
+      {/* Mobile Wallet Installation Guide */}
+      {!connected && window.navigator.userAgent.includes('Mobile') && (
+        <div className="mt-6 p-4 bg-blue-500/20 border border-blue-400/30 rounded-xl">
+          <h3 className="text-lg font-semibold text-blue-200 mb-3 text-center">
+            📱 Mobile Wallet Setup Guide
+          </h3>
+          
+          <div className="space-y-3">
+            <div className="bg-blue-600/20 p-3 rounded-lg">
+              <h4 className="font-medium text-blue-200 mb-2">👻 Phantom Wallet</h4>
+              <div className="flex flex-wrap gap-2 mb-2">
+                <a 
+                  href="https://apps.apple.com/app/phantom-crypto-wallet/id1598432977" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-3 py-1 bg-purple-600/80 text-white text-xs rounded-lg hover:bg-purple-500/80 transition-colors"
+                >
+                  📱 iOS App Store
+                </a>
+                <a 
+                  href="https://play.google.com/store/apps/details?id=app.phantom" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-3 py-1 bg-purple-600/80 text-white text-xs rounded-lg hover:bg-purple-500/80 transition-colors"
+                >
+                  🤖 Google Play
+                </a>
+              </div>
+              <p className="text-xs text-blue-300">
+                Most popular Solana wallet with excellent mobile support
+              </p>
+            </div>
+            
+            <div className="bg-orange-600/20 p-3 rounded-lg">
+              <h4 className="font-medium text-orange-200 mb-2">🔥 Solflare Wallet</h4>
+              <div className="flex flex-wrap gap-2 mb-2">
+                <a 
+                  href="https://apps.apple.com/app/solflare-wallet/id1580902717" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-3 py-1 bg-orange-600/80 text-white text-xs rounded-lg hover:bg-orange-500/80 transition-colors"
+                >
+                  📱 iOS App Store
+                </a>
+                <a 
+                  href="https://play.google.com/store/apps/details?id=com.solflare.mobile" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-3 py-1 bg-orange-600/80 text-white text-xs rounded-lg hover:bg-orange-500/80 transition-colors"
+                >
+                  🤖 Google Play
+                </a>
+              </div>
+              <p className="text-xs text-orange-300">
+                Feature-rich wallet with advanced DeFi tools
+              </p>
+            </div>
+            
+            <div className="bg-blue-600/20 p-3 rounded-lg">
+              <h4 className="font-medium text-blue-200 mb-2">🌐 Torus Wallet</h4>
+              <div className="flex flex-wrap gap-2 mb-2">
+                <a 
+                  href="https://apps.apple.com/app/torus-wallet/id1486384457" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-3 py-1 bg-blue-600/80 text-white text-xs rounded-lg hover:bg-blue-500/80 transition-colors"
+                >
+                  📱 iOS App Store
+                </a>
+                <a 
+                  href="https://play.google.com/store/apps/details?id=com.torus.wallet" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-3 py-1 bg-blue-600/80 text-white text-xs rounded-lg hover:bg-blue-500/80 transition-colors"
+                >
+                  🤖 Google Play
+                </a>
+              </div>
+              <p className="text-xs text-blue-300">
+                Web3 wallet with social login options
+              </p>
+            </div>
+            
+            <div className="bg-green-600/20 p-3 rounded-lg">
+              <h4 className="font-medium text-green-200 mb-2">💰 Coinbase Wallet</h4>
+              <div className="flex flex-wrap gap-2 mb-2">
+                <a 
+                  href="https://apps.apple.com/app/coinbase-wallet/id1278383455" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-3 py-1 bg-green-600/80 text-white text-xs rounded-lg hover:bg-green-500/80 transition-colors"
+                >
+                  📱 iOS App Store
+                </a>
+                <a 
+                  href="https://play.google.com/store/apps/details?id=org.toshi" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-3 py-1 bg-green-600/80 text-white text-xs rounded-lg hover:bg-green-500/80 transition-colors"
+                >
+                  🤖 Google Play
+                </a>
+              </div>
+              <p className="text-xs text-green-300">
+                Established wallet with multi-chain support
+              </p>
+            </div>
+          </div>
+          
+          <div className="mt-4 p-3 bg-yellow-500/20 border border-yellow-400/30 rounded-lg">
+            <h4 className="font-medium text-yellow-200 mb-2">💡 After Installation:</h4>
+            <ol className="text-xs text-yellow-300 space-y-1 list-decimal list-inside">
+              <li>Install your preferred wallet app</li>
+              <li>Create or import your Solana wallet</li>
+              <li>Return to this page and tap the wallet button above</li>
+              <li>The app will automatically open and connect</li>
+              <li>Grant connection permission when prompted</li>
+            </ol>
+          </div>
+          
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center px-4 py-2 bg-blue-600/80 text-white text-sm rounded-lg hover:bg-blue-500/80 transition-colors"
+            >
+              🔄 Refresh Page After Installation
+            </button>
+          </div>
+          
+          {/* Troubleshooting Guide */}
+          <div className="mt-4 p-3 bg-red-500/20 border border-red-400/30 rounded-lg">
+            <h4 className="font-medium text-red-200 mb-2">🔧 Troubleshooting Common Issues:</h4>
+            <div className="text-xs text-red-300 space-y-2">
+              <div className="flex items-start space-x-2">
+                <span className="text-red-400">❌</span>
+                <span><strong>Wallet opens but doesn't connect:</strong> Make sure to grant connection permission when prompted</span>
+              </div>
+              <div className="flex items-start space-x-2">
+                <span className="text-red-400">❌</span>
+                <span><strong>App not found:</strong> Install the wallet app first, then return here</span>
+              </div>
+              <div className="flex items-start space-x-2">
+                <span className="text-red-400">❌</span>
+                <span><strong>Connection timeout:</strong> Check if wallet app is open and try again</span>
+              </div>
+              <div className="flex items-start space-x-2">
+                <span className="text-red-400">❌</span>
+                <span><strong>Permission denied:</strong> Go to wallet settings and allow this website</span>
+              </div>
+              <div className="flex items-start space-x-2">
+                <span className="text-green-400">✅</span>
+                <span><strong>Solution:</strong> Try refreshing the page after installing wallet app</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
