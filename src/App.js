@@ -100,6 +100,7 @@ function WalletPanel({ onVerify }) {
   const [nftCount, setNftCount] = useState(null);
   const [lastVerifiedAt, setLastVerifiedAt] = useState(new Date().toISOString());
   const [tgId, setTgId] = useState("7761809923"); // Add Telegram ID state with user's ID
+  const [mobileWalletStatus, setMobileWalletStatus] = useState(null); // Add mobile wallet status
 
   const walletAddress = publicKey ? publicKey.toBase58() : null;
 
@@ -194,7 +195,7 @@ function WalletPanel({ onVerify }) {
     };
   }, []);
 
-  // Mobile wallet detection
+  // Mobile wallet detection and connection handling
   useEffect(() => {
     const detectMobileWallets = () => {
       const mobileWallets = [];
@@ -240,6 +241,288 @@ function WalletPanel({ onVerify }) {
     
     detectMobileWallets();
     
+    // Handle mobile wallet return flow
+    const handleMobileWalletReturn = () => {
+      // Check if we're returning from a mobile wallet
+      const urlParams = new URLSearchParams(window.location.search);
+      const returningFromWallet = urlParams.get('wallet_return') || 
+                                  urlParams.get('return') || 
+                                  urlParams.get('from_wallet');
+      
+      if (returningFromWallet) {
+        console.log("🔄 Detected return from mobile wallet, attempting auto-connection...");
+        
+        // Show mobile wallet status
+        setMobileWalletStatus({
+          title: "Returning from Wallet App",
+          message: "Attempting to reconnect to your wallet...",
+          loading: true
+        });
+        
+        // Clear the return parameter
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.delete('wallet_return');
+        newUrl.searchParams.delete('return');
+        newUrl.searchParams.delete('from_wallet');
+        window.history.replaceState({}, '', newUrl);
+        
+        // Wait a bit for wallet to be ready, then try to connect
+        setTimeout(() => {
+          try {
+            // Try to auto-connect to the detected wallet
+            if (window.solana?.isPhantom) {
+              console.log("🔄 Attempting to connect to Phantom wallet...");
+              setMobileWalletStatus({
+                title: "Connecting to Phantom",
+                message: "Establishing connection...",
+                loading: true
+              });
+              
+              window.solana.connect().then(() => {
+                console.log("✅ Successfully connected to Phantom wallet");
+                setStatus({ type: "success", message: "🎉 Mobile wallet connected successfully!" });
+                setMobileWalletStatus({
+                  title: "Connected to Phantom",
+                  message: "Wallet connection successful!",
+                  loading: false
+                });
+                
+                // Clear status after 3 seconds
+                setTimeout(() => setMobileWalletStatus(null), 3000);
+              }).catch(err => {
+                console.warn("⚠️ Failed to auto-connect to Phantom:", err);
+                setMobileWalletStatus({
+                  title: "Connection Failed",
+                  message: "Please try connecting manually",
+                  loading: false
+                });
+                
+                // Clear status after 5 seconds
+                setTimeout(() => setMobileWalletStatus(null), 5000);
+              });
+            } else if (window.solflare?.isSolflare) {
+              console.log("🔄 Attempting to connect to Solflare wallet...");
+              setMobileWalletStatus({
+                title: "Connecting to Solflare",
+                message: "Establishing connection...",
+                loading: true
+              });
+              
+              window.solflare.connect().then(() => {
+                console.log("✅ Successfully connected to Solflare wallet");
+                setStatus({ type: "success", message: "🎉 Mobile wallet connected successfully!" });
+                setMobileWalletStatus({
+                  title: "Connected to Solflare",
+                  message: "Wallet connection successful!",
+                  loading: false
+                });
+                
+                // Clear status after 3 seconds
+                setTimeout(() => setMobileWalletStatus(null), 3000);
+              }).catch(err => {
+                console.warn("⚠️ Failed to auto-connect to Solflare:", err);
+                setMobileWalletStatus({
+                  title: "Connection Failed",
+                  message: "Please try connecting manually",
+                  loading: false
+                });
+                
+                // Clear status after 5 seconds
+                setTimeout(() => setMobileWalletStatus(null), 5000);
+              });
+            } else if (window.torus) {
+              console.log("🔄 Attempting to connect to Torus wallet...");
+              setMobileWalletStatus({
+                title: "Connecting to Torus",
+                message: "Establishing connection...",
+                loading: true
+              });
+              
+              window.torus.login().then(() => {
+                console.log("✅ Successfully connected to Torus wallet");
+                setStatus({ type: "success", message: "🎉 Mobile wallet connected successfully!" });
+                setMobileWalletStatus({
+                  title: "Connected to Torus",
+                  message: "Wallet connection successful!",
+                  loading: false
+                });
+                
+                // Clear status after 3 seconds
+                setTimeout(() => setMobileWalletStatus(null), 3000);
+              }).catch(err => {
+                console.warn("⚠️ Failed to auto-connect to Torus:", err);
+                setMobileWalletStatus({
+                  title: "Connection Failed",
+                  message: "Please try connecting manually",
+                  loading: false
+                });
+                
+                // Clear status after 5 seconds
+                setTimeout(() => setMobileWalletStatus(null), 5000);
+              });
+            } else if (window.coinbaseWallet) {
+              console.log("🔄 Attempting to connect to Coinbase wallet...");
+              setMobileWalletStatus({
+                title: "Connecting to Coinbase",
+                message: "Establishing connection...",
+                loading: true
+              });
+              
+              window.coinbaseWallet.request({ method: 'eth_requestAccounts' }).then(() => {
+                console.log("✅ Successfully connected to Coinbase wallet");
+                setStatus({ type: "success", message: "🎉 Mobile wallet connected successfully!" });
+                setMobileWalletStatus({
+                  title: "Connected to Coinbase",
+                  message: "Wallet connection successful!",
+                  loading: false
+                });
+                
+                // Clear status after 3 seconds
+                setTimeout(() => setMobileWalletStatus(null), 3000);
+              }).catch(err => {
+                console.warn("⚠️ Failed to auto-connect to Coinbase:", err);
+                setMobileWalletStatus({
+                  title: "Connection Failed",
+                  message: "Please try connecting manually",
+                  loading: false
+                });
+                
+                // Clear status after 5 seconds
+                setTimeout(() => setMobileWalletStatus(null), 5000);
+              });
+            }
+          } catch (error) {
+            console.warn("⚠️ Error during mobile wallet auto-connection:", error);
+            setMobileWalletStatus({
+              title: "Connection Error",
+              message: "An error occurred during connection",
+              loading: false
+            });
+            
+            // Clear status after 5 seconds
+            setTimeout(() => setMobileWalletStatus(null), 5000);
+          }
+        }, 1000);
+      }
+    };
+    
+    // Check for mobile wallet return on page load
+    handleMobileWalletReturn();
+    
+    // Handle page visibility changes (when user switches to wallet app and back)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Page became visible again (user returned from wallet app)
+        console.log("🔄 Page became visible, checking for wallet connection...");
+        
+        // Wait a bit for wallet to be ready
+        setTimeout(() => {
+          if (!connected && (window.solana?.isPhantom || window.solflare?.isSolflare || window.torus || window.coinbaseWallet)) {
+            console.log("🔄 Attempting auto-connection after returning from wallet app...");
+            
+            setMobileWalletStatus({
+              title: "Returning from Wallet",
+              message: "Attempting to reconnect...",
+              loading: true
+            });
+            
+            // Try to auto-connect
+            try {
+              if (window.solana?.isPhantom) {
+                window.solana.connect().then(() => {
+                  console.log("✅ Auto-connected to Phantom after return");
+                  setMobileWalletStatus({
+                    title: "Connected to Phantom",
+                    message: "Auto-connection successful!",
+                    loading: false
+                  });
+                  setTimeout(() => setMobileWalletStatus(null), 3000);
+                }).catch(() => {
+                  setMobileWalletStatus(null);
+                });
+              } else if (window.solflare?.isSolflare) {
+                window.solflare.connect().then(() => {
+                  console.log("✅ Auto-connected to Solflare after return");
+                  setMobileWalletStatus({
+                    title: "Connected to Solflare",
+                    message: "Auto-connection successful!",
+                    loading: false
+                  });
+                  setTimeout(() => setMobileWalletStatus(null), 3000);
+                }).catch(() => {
+                  setMobileWalletStatus(null);
+                });
+              }
+            } catch (error) {
+              console.warn("⚠️ Error during auto-connection after return:", error);
+              setMobileWalletStatus(null);
+            }
+          }
+        }, 1000);
+      } else if (document.visibilityState === 'hidden') {
+        // Page became hidden (user switched to wallet app)
+        console.log("📱 Page became hidden, user likely switched to wallet app");
+        
+        // Show status that user is in wallet app
+        if (!connected && window.navigator.userAgent.includes('Mobile')) {
+          setMobileWalletStatus({
+            title: "In Wallet App",
+            message: "Complete connection in your wallet app, then return here",
+            loading: false
+          });
+        }
+      }
+    };
+    
+    // Add visibility change listener
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Handle window focus (when user returns to browser tab)
+    const handleWindowFocus = () => {
+      console.log("🔄 Window focused, checking for wallet connection...");
+      
+      // Wait a bit for wallet to be ready
+      setTimeout(() => {
+        if (!connected && (window.solana?.isPhantom || window.solflare?.isSolflare || window.torus || window.coinbaseWallet)) {
+          console.log("🔄 Attempting auto-connection after window focus...");
+          
+          try {
+            if (window.solana?.isPhantom) {
+              window.solana.connect().then(() => {
+                console.log("✅ Auto-connected to Phantom after focus");
+                setMobileWalletStatus({
+                  title: "Connected to Phantom",
+                  message: "Auto-connection successful!",
+                  loading: false
+                });
+                setTimeout(() => setMobileWalletStatus(null), 3000);
+              }).catch(() => {
+                setMobileWalletStatus(null);
+              });
+            } else if (window.solflare?.isSolflare) {
+              window.solflare.connect().then(() => {
+                console.log("✅ Auto-connected to Solflare after focus");
+                setMobileWalletStatus({
+                  title: "Connected to Solflare",
+                  message: "Auto-connection successful!",
+                  loading: false
+                });
+                setTimeout(() => setMobileWalletStatus(null), 3000);
+              }).catch(() => {
+                setMobileWalletStatus(null);
+              });
+            }
+          } catch (error) {
+            console.warn("⚠️ Error during auto-connection after focus:", error);
+            setMobileWalletStatus(null);
+          }
+        }
+      }, 1000);
+    };
+    
+    // Add window focus listener
+    window.addEventListener('focus', handleWindowFocus);
+    
     // Set up continuous monitoring for newly installed wallets
     const checkForNewWallets = () => {
       try {
@@ -264,9 +547,36 @@ function WalletPanel({ onVerify }) {
     // Check every 2 seconds for newly installed wallets
     const walletCheckInterval = setInterval(checkForNewWallets, 2000);
     
-    // Cleanup interval on unmount
-    return () => clearInterval(walletCheckInterval);
-  }, []);
+    // Listen for wallet connection events
+    const handleWalletConnection = (event) => {
+      if (event.type === 'connect') {
+        console.log("🎉 Wallet connected via event:", event);
+        setStatus({ type: "success", message: "🎉 Mobile wallet connected successfully!" });
+        setMobileWalletStatus(null); // Clear mobile status
+      }
+    };
+    
+    // Add event listeners for wallet connections
+    if (window.solana) {
+      window.solana.on('connect', handleWalletConnection);
+    }
+    if (window.solflare) {
+      window.solflare.on('connect', handleWalletConnection);
+    }
+    
+    // Cleanup interval and event listeners on unmount
+    return () => {
+      clearInterval(walletCheckInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+      if (window.solana) {
+        window.solana.off('connect', handleWalletConnection);
+      }
+      if (window.solflare) {
+        window.solflare.off('connect', handleWalletConnection);
+      }
+    };
+  }, [connected]);
 
   const doVerify = useCallback(
     async (collectionId = DEFAULT_COLLECTION, tg_id = null) => {
@@ -387,80 +697,8 @@ function WalletPanel({ onVerify }) {
           )}
         </div>
         
-        {/* Mobile Wallet Instructions */}
-        {!connected && window.navigator.userAgent.includes('Mobile') && (
-          <div className="mt-4 p-4 bg-blue-500/20 border border-blue-400/30 rounded-xl">
-            <p className="text-sm text-blue-200 text-center mb-3">
-              📱 <strong>Mobile Users:</strong> Install a Solana wallet app for automatic connection
-            </p>
-            <p className="text-xs text-blue-300 text-center mb-3">
-              💡 <strong>Note:</strong> Your Telegram ID will be automatically fetched from the URL when you visit this page
-            </p>
-            <div className="flex flex-wrap justify-center gap-2">
-              <a 
-                href="https://apps.apple.com/app/phantom-crypto-wallet/id1598432977" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center px-3 py-1 bg-purple-600/80 text-white text-xs rounded-lg hover:bg-purple-500/80 transition-colors"
-              >
-                📱 Phantom (iOS)
-              </a>
-              <a 
-                href="https://play.google.com/store/apps/details?id=app.phantom" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center px-3 py-1 bg-purple-600/80 text-white text-xs rounded-lg hover:bg-purple-500/80 transition-colors"
-              >
-                🤖 Phantom (Android)
-              </a>
-              <a 
-                href="https://apps.apple.com/app/solflare-wallet/id1580902717" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center px-3 py-1 bg-orange-600/80 text-white text-xs rounded-lg hover:bg-orange-500/80 transition-colors"
-              >
-                📱 Solflare (iOS)
-              </a>
-              <a 
-                href="https://play.google.com/store/apps/details?id=com.solflare.mobile" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center px-3 py-1 bg-orange-600/80 text-white text-xs rounded-lg hover:bg-orange-500/80 transition-colors"
-              >
-                🤖 Solflare (Android)
-              </a>
-              <a 
-                href="https://apps.apple.com/app/torus-wallet/id1486384457" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center px-3 py-1 bg-blue-600/80 text-white text-xs rounded-lg hover:bg-blue-500/80 transition-colors"
-              >
-                📱 Torus (iOS)
-              </a>
-              <a 
-                href="https://play.google.com/store/apps/details?id=com.torus.wallet" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center px-3 py-1 bg-blue-600/80 text-white text-xs rounded-lg hover:bg-blue-500/80 transition-colors"
-              >
-                🤖 Torus (Android)
-              </a>
-            </div>
-            <p className="text-xs text-blue-300 text-center mt-2">
-              💡 After installation, refresh the page or wait a few seconds for automatic detection
-            </p>
-            <div className="flex justify-center mt-3">
-              <button
-                onClick={() => {
-                  window.location.reload();
-                }}
-                className="inline-flex items-center px-3 py-1 bg-blue-600/80 text-white text-xs rounded-lg hover:bg-blue-500/80 transition-colors"
-              >
-                🔄 Refresh Page
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Mobile Wallet Instructions - REMOVED */}
+        
       </div>
 
       {/* Telegram ID Input - Hidden but functional */}
@@ -485,6 +723,24 @@ function WalletPanel({ onVerify }) {
 
       {/* Status Display */}
       <StatusIndicator type={status.type} message={status.message} />
+
+      {/* Mobile Wallet Status */}
+      {mobileWalletStatus && (
+        <div className="mt-4 p-4 bg-purple-500/20 border border-purple-400/30 rounded-xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <span className="text-2xl">📱</span>
+              <div>
+                <p className="text-sm text-purple-200 font-medium">{mobileWalletStatus.title}</p>
+                <p className="text-xs text-purple-300">{mobileWalletStatus.message}</p>
+              </div>
+            </div>
+            {mobileWalletStatus.loading && (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-400"></div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mt-6 md:mt-8">
