@@ -1,69 +1,43 @@
 {
   "name": "nft-verification-portal",
   "version": "1.0.0",
-  "description": "Meta Betties NFT Verification Portal - Secure blockchain-based NFT ownership verification",
   "private": true,
-  "author": "Jharna Khanam (@mushfiqmoon)",
-  "license": "MIT",
-  "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
-  },
-  "main": "src/index.js",
-  "homepage": ".",
   "dependencies": {
-    "@solana-mobile/wallet-adapter-mobile": "^1.0.1",
-    "@solana/wallet-adapter-backpack": "^0.1.14",
-    "@solana/wallet-adapter-base": "^0.9.27",
-    "@solana/wallet-adapter-react": "^0.15.39",
-    "@solana/wallet-adapter-react-ui": "^0.9.39",
-    "@solana/wallet-adapter-wallets": "^0.19.37",
-    "@solana/web3.js": "^1.98.4",
+    "@solana/wallet-adapter-react": "^0.15.35",
+    "@solana/wallet-adapter-react-ui": "^0.9.34",
+    "@solana/wallet-adapter-wallets": "^0.19.23",
+    "@solana/web3.js": "^1.98.2",
     "@solflare-wallet/sdk": "^1.4.2",
     "@testing-library/jest-dom": "^5.16.4",
     "@testing-library/react": "^13.3.0",
     "@testing-library/user-event": "^13.5.0",
-    "ajv": "^8.12.0",
-    "buffer": "^6.0.3",
-    "cross-env": "^7.0.3",
-    "crypto-browserify": "^3.12.1",
-    "process": "^0.11.10",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "cross-env": "^10.0.0",
+    "react": "^18.2.0",
+    "react-app-rewired": "^2.2.1",
+    "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
-    "serve": "^14.2.1",
-    "stream-browserify": "^3.0.0",
-    "typescript": "^4.9.5",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-app-rewired start",
-    "dev": "react-app-rewired start",
+    "start": "cross-env GENERATE_SOURCEMAP=false react-app-rewired start",
+    "dev": "cross-env GENERATE_SOURCEMAP=false react-app-rewired start",
     "build": "cross-env GENERATE_SOURCEMAP=false react-app-rewired build",
-    "build:render": "GENERATE_SOURCEMAP=false react-app-rewired build",
-    "build:production": "cross-env NODE_ENV=production GENERATE_SOURCEMAP=false react-app-rewired build",
-    "build:yarn": "yarn install && yarn add @solana-mobile/wallet-adapter-mobile@1.0.1 && GENERATE_SOURCEMAP=false react-app-rewired build",
-    "serve:build": "serve -s build -l $PORT",
-    "start:render": "serve -s build -l $PORT",
+    "build:production": "cross-env GENERATE_SOURCEMAP=false NODE_ENV=production react-app-rewired build",
+    "build:render": "cross-env GENERATE_SOURCEMAP=false NODE_ENV=production react-app-rewired build",
+    "serve:build": "npx serve -s build",
     "test": "react-app-rewired test",
-    "test:watch": "react-app-rewired test --watch",
     "test:coverage": "react-app-rewired test --coverage --watchAll=false",
-    "eject": "react-scripts eject",
-    "lint": "eslint src/**/*.{js,jsx,ts,tsx}",
-    "lint:fix": "eslint src/**/*.{js,jsx,ts,tsx} --fix",
-    "format": "prettier --write src/**/*.{js,jsx,ts,tsx,css,md}",
-    "clean": "rm -rf build node_modules package-lock.json && npm install",
-    "preinstall": "npx only-allow npm"
+    "test:watch": "react-app-rewired test --watch",
+    "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,json,css,scss,md}\"",
+    "clean": "rm -rf node_modules package-lock.json && npm install --legacy-peer-deps",
+    "eject": "react-scripts eject"
   },
   "eslintConfig": {
     "extends": [
       "react-app",
       "react-app/jest"
-    ],
-    "rules": {
-      "no-unused-vars": "warn",
-      "no-console": "warn"
-    }
+    ]
   },
   "browserslist": {
     "production": [
@@ -79,33 +53,7 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.4.14",
-    "eslint": "^8.0.0",
     "postcss": "^8.4.24",
-    "prettier": "^2.8.0",
-    "react-app-rewired": "^2.2.1",
-    "tailwindcss": "^3.4.17"
-  },
-  "overrides": {
-    "typescript": "^4.9.5"
-  },
-  "keywords": [
-    "nft",
-    "solana",
-    "blockchain",
-    "wallet",
-    "verification",
-    "react",
-    "web3",
-    "cryptocurrency"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourusername/nft-verification-portal.git"
-  },
-  "bugs": {
-    "url": "https://github.com/yourusername/nft-verification-portal/issues"
-  },
-  "resolutions": {
-    "@solana/web3.js": "^1.98.4"
+    "tailwindcss": "^3.3.0"
   }
 }
