@@ -1,6 +1,10 @@
 // App.js
-import React, { useState, useEffect, useCallback } from "react";
-// Remove unused imports: Connection, PublicKey, useMemo
+import React, { useMemo, useState, useEffect, useCallback } from "react";
+import { Connection, PublicKey } from "@solana/web3.js";
+
+import {
+  WalletAdapterNetwork
+} from "@solana/wallet-adapter-base";
 
 import {
   ConnectionProvider,
@@ -20,11 +24,6 @@ import {
   CoinbaseWalletAdapter
 } from "@solana/wallet-adapter-wallets";
 
-// Reown AppKit imports for better mobile support
-// import { createAppKit } from '@reown/appkit/react';
-// import { SolanaAdapter } from '@reown/appkit-adapter-solana';
-// import { solana } from '@reown/appkit/networks';
-
 // Temporarily comment out problematic mobile adapter
 // import { SolanaMobileWalletAdapter } from "@solana-mobile/wallet-adapter-mobile";
 
@@ -35,31 +34,10 @@ import { CONFIG } from "./config";
 // ---------------------
 // CONFIG (Change these)
 // ---------------------
-// const NETWORK = WalletAdapterNetwork.Mainnet; // Remove unused NETWORK
+const NETWORK = WalletAdapterNetwork.Mainnet;
 const RPC_ENDPOINT = "https://api.mainnet-beta.solana.com";
-const API_BASE = CONFIG.API.BASE_URL; // Use config file instead of hardcoded URL
+const API_BASE = "https://api-server-wcjc.onrender.com";
 const DEFAULT_COLLECTION = "j7qeFNnpWTbaf5g9sMCxP2zfKrH5QFgE56SuYjQDQi1";
-
-// Reown AppKit Configuration - Temporarily disabled
-// const REOWN_PROJECT_ID = CONFIG.REOWN_APPKIT.PROJECT_ID;
-
-// Initialize Reown AppKit for Solana - Temporarily disabled
-// const solanaAdapter = new SolanaAdapter({
-//   networks: [solana],
-//   projectId: REOWN_PROJECT_ID,
-//   metadata: CONFIG.REOWN_APPKIT.METADATA
-// });
-
-// Create AppKit instance - Temporarily disabled
-// createAppKit({
-//   adapters: [solanaAdapter],
-//   networks: [solana],
-//   projectId: REOWN_PROJECT_ID,
-//   metadata: CONFIG.REOWN_APPKIT.METADATA,
-//   features: {
-//     analytics: false // Disable analytics for now
-//   }
-// });
 
 // ---------------------
 // Utilities
@@ -67,7 +45,7 @@ const DEFAULT_COLLECTION = "j7qeFNnpWTbaf5g9sMCxP2zfKrH5QFgE56SuYjQDQi1";
 const shortAddress = (addr = "", len = 6) =>
   addr ? `${addr.slice(0, len)}...${addr.slice(-4)}` : "";
 
-// Remove unused isoNow function
+const isoNow = () => new Date().toISOString();
 
 // ---------------------
 // Professional Status Component
@@ -113,63 +91,10 @@ function StatsCard({ title, value, icon, gradient = "gradient-primary" }) {
 }
 
 // ---------------------
-// Reown AppKit Connect Button Component - Temporarily disabled
-// ---------------------
-/*
-function ReownAppKitConnectButton() {
-  const [isConnecting, setIsConnecting] = useState(false);
-  
-  const handleReownConnect = useCallback(async () => {
-    if (isConnecting) return;
-    
-    setIsConnecting(true);
-    
-    try {
-      // Use Reown AppKit's built-in connection method
-      console.log("🚀 Reown AppKit: Initiating wallet connection...");
-      
-      // Show connecting status
-      // The actual connection will be handled by Reown AppKit
-      
-      // Simulate connection process for better UX
-      setTimeout(() => {
-        setIsConnecting(false);
-        console.log("✅ Reown AppKit: Connection process completed");
-      }, 3000);
-      
-    } catch (error) {
-      console.error("❌ Reown AppKit connection error:", error);
-      setIsConnecting(false);
-    }
-  }, [isConnecting]);
-  
-  return (
-    <button
-      onClick={handleReownConnect}
-      disabled={isConnecting}
-      className="btn btn-primary flex-1 text-sm md:text-base px-4 md:px-6 py-3 md:py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 transition-all duration-300"
-    >
-      {isConnecting ? (
-        <div className="flex items-center space-x-2">
-          <div className="animate-spin rounded-full h-4 w-4 md:h-5 md:w-5 border-b-2 border-white"></div>
-          <span>Connecting with Reown AppKit...</span>
-        </div>
-      ) : (
-        <div className="flex items-center space-x-2">
-          <span>🚀</span>
-          <span>Connect with Reown AppKit</span>
-        </div>
-      )}
-    </button>
-  );
-}
-*/
-
-// ---------------------
-// Professional Wallet Panel with Enhanced Mobile Support
+// Professional Wallet Panel
 // ---------------------
 function WalletPanel({ onVerify }) {
-  const { publicKey, connected } = useWallet(); // Remove unused: signTransaction, signAllTransactions, disconnect
+  const { publicKey, connected, signTransaction, signAllTransactions, disconnect } = useWallet();
   const [status, setStatus] = useState({ type: "info", message: "🔗 Welcome! Connect your Solana wallet to start NFT verification" });
   const [verifying, setVerifying] = useState(false);
   const [nftCount, setNftCount] = useState(null);
@@ -234,17 +159,16 @@ function WalletPanel({ onVerify }) {
     }
   }, [connected, publicKey, mobileWalletConnecting]);
 
-  // Enhanced mobile wallet connection with simplified logic
+  // Mobile wallet connection handling
   const handleMobileWalletConnection = useCallback(async (selectedWalletType) => {
     if (mobileWalletConnecting) return;
     
-    setWalletType(selectedWalletType);
+    setWalletType(selectedWalletType); // Set the wallet type being connected
     setMobileWalletConnecting(true);
     setConnectionAttempts(0);
     setStatus({ type: "info", message: `📱 Opening ${selectedWalletType} wallet...` });
     
     try {
-      // Simplified deep link approach for mobile wallet connection
       let deepLink = '';
       let fallbackUrl = '';
       
@@ -256,65 +180,79 @@ function WalletPanel({ onVerify }) {
           fallbackUrl = 'https://phantom.app/';
           break;
         case 'solflare':
-          // Solflare mobile deep link with proper app scheme
-          deepLink = `solflare://ul/browse/${encodeURIComponent(window.location.href)}`;
+          // Solflare mobile deep link
+          deepLink = `https://solflare.com/ul/browse/${encodeURIComponent(window.location.href)}`;
           fallbackUrl = 'https://solflare.com/';
           break;
         case 'torus':
-          // Torus mobile deep link with app scheme
-          deepLink = `torus://wallet/connect?appName=MetaBetties&appUrl=${encodeURIComponent(window.location.href)}`;
+          // Torus mobile deep link
+          deepLink = `https://app.tor.us/wallet/connect?appName=MetaBetties&appUrl=${encodeURIComponent(window.location.href)}`;
           fallbackUrl = 'https://app.tor.us/';
           break;
         case 'coinbase':
-          // Coinbase mobile deep link with app scheme
-          deepLink = `coinbase-wallet://wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`;
+          // Coinbase mobile deep link
+          deepLink = `https://wallet.coinbase.com/wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`;
           fallbackUrl = 'https://wallet.coinbase.com/';
           break;
         default:
-          // Default fallback for unknown wallet types
           deepLink = window.location.href;
           fallbackUrl = window.location.href;
-          break;
       }
       
-      console.log(`📱 Enhanced: Attempting to connect to ${selectedWalletType} with deep link:`, deepLink);
+      console.log(`📱 Attempting to connect to ${selectedWalletType} with deep link:`, deepLink);
       
-      // For mobile devices, use simplified connection strategy
+      // For mobile devices, use different connection strategies
       if (window.navigator.userAgent.includes('Mobile')) {
-        console.log("📱 Mobile device detected, using simplified mobile connection strategy");
+        console.log("📱 Mobile device detected, using mobile connection strategy");
         
-        // Method 1: Try window.open with deep link first
+        // Method 1: Try to open deep link directly
         try {
+          // Create a hidden iframe to test if deep link works
+          const testFrame = document.createElement('iframe');
+          testFrame.style.display = 'none';
+          testFrame.src = deepLink;
+          document.body.appendChild(testFrame);
+          
+          // Remove test frame after a short delay
+          setTimeout(() => {
+            if (testFrame.parentNode) {
+              testFrame.parentNode.removeChild(testFrame);
+            }
+          }, 1000);
+          
+          // Method 2: Try window.open with deep link
           const newWindow = window.open(deepLink, '_blank');
           
-          // Method 2: If window.open fails, try alternative approach
+          // Method 3: If window.open fails, try location.href
           if (!newWindow || newWindow.closed) {
-            console.log("📱 Window.open failed, trying alternative approach");
-            
-            // Try alternative deep link formats for better mobile compatibility
-            let alternativeLink = '';
-            switch (selectedWalletType.toLowerCase()) {
-              case 'phantom':
-                alternativeLink = `https://phantom.app/ul/browse/${encodeURIComponent(window.location.href)}`;
-                break;
-              case 'solflare':
-                alternativeLink = `https://solflare.com/ul/browse/${encodeURIComponent(window.location.href)}`;
-                break;
-              case 'torus':
-                alternativeLink = `https://app.tor.us/wallet/connect?appName=MetaBetties&appUrl=${encodeURIComponent(window.location.href)}`;
-                break;
-              case 'coinbase':
-                alternativeLink = `https://wallet.coinbase.com/wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`;
-                break;
-              default:
-                alternativeLink = window.location.href;
-                break;
-            }
-            
-            if (alternativeLink) {
-              console.log("📱 Trying alternative link:", alternativeLink);
-              window.open(alternativeLink, '_blank');
-            }
+            console.log("📱 Window.open failed, trying location.href");
+            // Use a timeout to prevent immediate redirect
+            setTimeout(() => {
+              if (!connected && mobileWalletConnecting) {
+                console.log("📱 Trying alternative deep link approach");
+                // Try alternative deep link formats
+                let alternativeLink = '';
+                switch (selectedWalletType.toLowerCase()) {
+                  case 'phantom':
+                    alternativeLink = `https://phantom.app/ul/browse/${encodeURIComponent(window.location.href)}`;
+                    break;
+                  case 'solflare':
+                    alternativeLink = `https://solflare.com/ul/browse/${encodeURIComponent(window.location.href)}`;
+                    break;
+                  case 'torus':
+                    alternativeLink = `https://app.tor.us/wallet/connect?appName=MetaBetties&appUrl=${encodeURIComponent(window.location.href)}`;
+                    break;
+                  case 'coinbase':
+                    alternativeLink = `https://wallet.coinbase.com/wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`;
+                    break;
+                }
+                
+                if (alternativeLink) {
+                  console.log("📱 Trying alternative link:", alternativeLink);
+                  window.open(alternativeLink, '_blank');
+                }
+              }
+            }, 2000);
           }
           
         } catch (deepLinkError) {
@@ -323,9 +261,9 @@ function WalletPanel({ onVerify }) {
           window.open(fallbackUrl, '_blank');
         }
         
-        // Set up a fallback timer with reasonable delay for mobile
+        // Set up a fallback timer with longer delay for mobile
         setTimeout(() => {
-          // If still not connected after 8 seconds, show fallback options
+          // If still not connected after 10 seconds, show fallback options
           if (!connected && mobileWalletConnecting) {
             console.log("📱 Connection timeout, showing fallback options");
             setStatus({ 
@@ -344,7 +282,7 @@ function WalletPanel({ onVerify }) {
               });
             }, 2000);
           }
-        }, 8000); // Reduced to 8 seconds for better UX
+        }, 10000); // Increased to 10 seconds for mobile
         
       } else {
         // For desktop, open in new tab
@@ -353,7 +291,7 @@ function WalletPanel({ onVerify }) {
       }
       
       // Set up connection monitoring with better error handling
-      const maxAttempts = 15; // Reduced timeout for better UX
+      const maxAttempts = 20; // Increased timeout for mobile
       const checkInterval = setInterval(() => {
         setConnectionAttempts(prev => {
           const newAttempts = prev + 1;
@@ -385,14 +323,16 @@ function WalletPanel({ onVerify }) {
             statusMessage = `📱 Opening ${selectedWalletType} app... (${newAttempts}/${maxAttempts})`;
           } else if (newAttempts <= 10) {
             statusMessage = `⏳ Waiting for ${selectedWalletType} connection... (${newAttempts}/${maxAttempts})`;
-          } else {
+          } else if (newAttempts <= 15) {
             statusMessage = `⚠️ Still waiting... Check if ${selectedWalletType} app is open (${newAttempts}/${maxAttempts})`;
+          } else {
+            statusMessage = `⚠️ Connection taking longer than expected... (${newAttempts}/${maxAttempts})`;
           }
           
           setStatus({ type: "info", message: statusMessage });
           return newAttempts;
         });
-      }, 1000); // Reduced interval for better responsiveness
+      }, 1500); // Reduced interval for better responsiveness
       
     } catch (error) {
       console.error(`Mobile wallet connection error for ${selectedWalletType}:`, error);
@@ -709,97 +649,37 @@ function WalletPanel({ onVerify }) {
           collection_id: collectionId
         };
 
-        // Try multiple endpoints to handle CORS issues
-        let res = null;
-        let data = null;
-        // Remove unused lastError variable
+        const res = await fetch(`${API_BASE}/api/verify-nft`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
 
-        // Try direct API call first
-        try {
-          console.log("🔗 Attempting direct API call to:", API_BASE);
-          res = await fetch(`${API_BASE}/api/verify-nft`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          
-          if (res.ok) {
-            data = await res.json();
-            console.log("✅ Direct API call successful");
-          } else {
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-          }
-        } catch (directError) {
-          console.warn("⚠️ Direct API call failed:", directError);
-          
-          // Try CORS proxy as fallback
-          try {
-            const corsProxyUrl = `${CONFIG.API.CORS_PROXY}${API_BASE}/api/verify-nft`;
-            console.log("🔗 Attempting CORS proxy call to:", corsProxyUrl);
-            
-            // Update status to show we're trying alternative method
-            setStatus({ 
-              type: "info", 
-              message: "🔄 Direct connection failed. Trying alternative connection method..." 
-            });
-            
-            res = await fetch(corsProxyUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload),
-            });
-            
-            if (res.ok) {
-              data = await res.json();
-              console.log("✅ CORS proxy call successful");
-            } else {
-              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-            }
-          } catch (proxyError) {
-            console.error("❌ Both direct and CORS proxy calls failed:", proxyError);
-            // Show user-friendly error message
-            setStatus({ 
-              type: "error", 
-              message: "⚠️ API connection failed. This might be a temporary issue. Please try again later or contact support." 
-            });
-            return;
-          }
-        }
+        const data = await res.json();
 
         if (!res.ok) {
-          setStatus({ type: "error", message: `⚠️ Verification failed: ${data?.error || res.statusText}` });
+          setStatus({ type: "error", message: `⚠️ Verification failed: ${data.error || res.statusText}` });
         } else {
           if (data.has_nft) {
             setStatus({ type: "success", message: `✅ Verified — ${data.nft_count || 1} NFT(s) found. Access granted.` });
             
             // Automatically redirect to private group after successful verification
             setTimeout(() => {
-              const privateGroupUrl = CONFIG.TELEGRAM_GROUPS.PRIVATE_KEY;
+              const privateGroupUrl = CONFIG.TELEGRAM_GROUPS.PRIVATE_KEY; // Use config for private group link
               setStatus({ type: "success", message: `🎉 Redirecting to private group...` });
               
-              // Improved mobile redirect logic
+              // Open private group in new tab with better mobile support
               try {
                 if (window.navigator.userAgent.includes('Mobile')) {
-                  // For mobile, try to open in same tab first
-                  console.log("📱 Mobile device detected, redirecting to private group");
-                  
-                  // Method 1: Try direct redirect
+                  // For mobile, try to open in same tab first, then fallback to new tab
                   window.location.href = privateGroupUrl;
                   
-                  // Method 2: Fallback to new tab if redirect doesn't work
+                  // Fallback: if redirect doesn't work within 2 seconds, open in new tab
                   setTimeout(() => {
-                    try {
+                    if (window.location.href !== privateGroupUrl) {
                       window.open(privateGroupUrl, '_blank');
-                    } catch (fallbackError) {
-                      console.warn("Fallback redirect failed:", fallbackError);
-                      // Show manual link
-                      setStatus({ 
-                        type: "success", 
-                        message: `🎉 Access granted! Click here: ${privateGroupUrl}` 
-                      });
                     }
-                  }, 1000);
-                  
+                  }, 2000);
                 } else {
                   // For desktop, open in new tab
                   window.open(privateGroupUrl, '_blank');
@@ -814,7 +694,7 @@ function WalletPanel({ onVerify }) {
               setTimeout(() => {
                 setStatus({ type: "success", message: `🎉 Access granted! Redirected to private group.` });
               }, 3000);
-            }, CONFIG.REDIRECT.SUCCESS_DELAY);
+            }, 2000);
             
           } else {
             setStatus({ type: "error", message: "❌ No matching NFT found for this wallet." });
@@ -823,32 +703,21 @@ function WalletPanel({ onVerify }) {
             setTimeout(() => {
               setStatus({ type: "warning", message: `⚠️ No NFT found. Redirecting to main group in 3 seconds...` });
               
-              // Redirect to main group after 3 seconds with improved mobile support
+              // Redirect to main group after 3 seconds with better mobile support
               setTimeout(() => {
                 const mainGroupUrl = CONFIG.TELEGRAM_GROUPS.MAIN_GROUP;
                 
                 try {
                   if (window.navigator.userAgent.includes('Mobile')) {
-                    // For mobile, try to open in same tab first
-                    console.log("📱 Mobile device detected, redirecting to main group");
-                    
-                    // Method 1: Try direct redirect
+                    // For mobile, try to open in same tab first, then fallback to new tab
                     window.location.href = mainGroupUrl;
                     
-                    // Method 2: Fallback to new tab if redirect doesn't work
+                    // Fallback: if redirect doesn't work within 2 seconds, open in new tab
                     setTimeout(() => {
-                      try {
+                      if (window.location.href !== mainGroupUrl) {
                         window.open(mainGroupUrl, '_blank');
-                      } catch (fallbackError) {
-                        console.warn("Fallback redirect failed:", fallbackError);
-                        // Show manual link
-                        setStatus({ 
-                          type: "warning", 
-                          message: `⚠️ Redirected to main group. Click here: ${mainGroupUrl}` 
-                        });
                       }
-                    }, 1000);
-                    
+                    }, 2000);
                   } else {
                     // For desktop, open in new tab
                     window.open(mainGroupUrl, '_blank');
@@ -886,29 +755,7 @@ function WalletPanel({ onVerify }) {
         if (typeof onVerify === "function") onVerify({ walletAddress, ...data });
       } catch (err) {
         console.error("verify error", err);
-        
-        // Provide specific error messages for common issues
-        let errorMessage = "⚠️ Error while verifying. Please try again.";
-        
-        if (err.name === 'TypeError' && err.message.includes('Failed to fetch')) {
-          errorMessage = "⚠️ Network error: Unable to connect to verification server. This might be a CORS issue or server downtime.";
-        } else if (err.message.includes('CORS')) {
-          errorMessage = "⚠️ CORS error: Server doesn't allow requests from this domain. Trying alternative connection methods...";
-        } else if (err.message.includes('timeout')) {
-          errorMessage = "⚠️ Request timeout: Server is taking too long to respond. Please try again.";
-        }
-        
-        setStatus({ type: "error", message: errorMessage });
-        
-        // Show additional troubleshooting tips for CORS issues
-        if (err.message.includes('CORS') || (err.name === 'TypeError' && err.message.includes('Failed to fetch'))) {
-          setTimeout(() => {
-            setStatus({ 
-              type: "warning", 
-              message: "💡 CORS Issue Detected: The API server doesn't allow requests from this domain. This is a server configuration issue, not a problem with your wallet or NFT." 
-            });
-          }, 3000);
-        }
+        setStatus({ type: "error", message: "⚠️ Error while verifying. Check console." });
       } finally {
         setVerifying(false);
       }
@@ -983,34 +830,46 @@ function WalletPanel({ onVerify }) {
               </button>
               <button
                 onClick={() => {
-                  // Use deep link approach for Solflare
-                  handleMobileWalletConnection('Solflare');
+                  // Try standard connection first, then fallback
+                  if (window.solflare?.isSolflare) {
+                    handleFallbackMobileConnection('Solflare');
+                  } else {
+                    handleMobileWalletConnection('Solflare');
+                  }
                 }}
                 disabled={mobileWalletConnecting}
                 className="inline-flex items-center px-3 py-2 bg-orange-600/80 text-white text-xs rounded-lg hover:bg-orange-500/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Connect Solflare Wallet - Deep link mobile support"
+                title="Connect Solflare Wallet - Good mobile support"
               >
                 🔥 Solflare
               </button>
               <button
                 onClick={() => {
-                  // Use deep link approach for Torus
-                  handleMobileWalletConnection('Torus');
+                  // Try standard connection first, then fallback
+                  if (window.torus) {
+                    handleFallbackMobileConnection('Torus');
+                  } else {
+                    handleMobileWalletConnection('Torus');
+                  }
                 }}
                 disabled={mobileWalletConnecting}
                 className="inline-flex items-center px-3 py-2 bg-blue-600/80 text-white text-xs rounded-lg hover:bg-blue-500/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Connect Torus Wallet - Deep link mobile support"
+                title="Connect Torus Wallet - Web3 wallet with social login"
               >
                 🌐 Torus
               </button>
               <button
                 onClick={() => {
-                  // Use deep link approach for Coinbase
-                  handleMobileWalletConnection('Coinbase');
+                  // Try standard connection first, then fallback
+                  if (window.coinbaseWallet) {
+                    handleFallbackMobileConnection('Coinbase');
+                  } else {
+                    handleMobileWalletConnection('Coinbase');
+                  }
                 }}
                 disabled={mobileWalletConnecting}
                 className="inline-flex items-center px-3 py-2 bg-green-600/80 text-white text-xs rounded-lg hover:bg-green-500/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Connect Coinbase Wallet - Deep link mobile support"
+                title="Connect Coinbase Wallet - Established multi-chain wallet"
               >
                 💰 Coinbase
               </button>
@@ -1043,19 +902,15 @@ function WalletPanel({ onVerify }) {
                 </div>
                 <div className="flex justify-between">
                   <span>🔥 Solflare:</span>
-                  <span className="text-green-400">✅ Deep Link</span>
+                  <span className="text-yellow-400">⚠️ Good Support</span>
                 </div>
                 <div className="flex justify-between">
                   <span>🌐 Torus:</span>
-                  <span className="text-green-400">✅ Deep Link</span>
+                  <span className="text-yellow-400">⚠️ Moderate Support</span>
                 </div>
                 <div className="flex justify-between">
                   <span>💰 Coinbase:</span>
-                  <span className="text-green-400">✅ Deep Link</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>🔗 Mobile:</span>
-                  <span className="text-green-400">✅ Enhanced Support</span>
+                  <span className="text-yellow-400">⚠️ Moderate Support</span>
                 </div>
               </div>
             </div>
@@ -1201,7 +1056,6 @@ function WalletPanel({ onVerify }) {
 
       {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row gap-3 md:gap-4 mt-6 md:mt-8">
-        {/* Verify NFT Button */}
         <button
           onClick={() => doVerify(DEFAULT_COLLECTION, tgId)}
           disabled={verifying}
@@ -1380,31 +1234,154 @@ function WalletPanel({ onVerify }) {
 }
 
 // ---------------------
-// Main App Component
+// Professional Feature Card
 // ---------------------
-function App() {
-  const wallets = [
-    new PhantomWalletAdapter(),
-    new SolflareWalletAdapter(),
-    new TorusWalletAdapter(),
-    new CoinbaseWalletAdapter(),
-  ];
+function FeatureCard({ icon, title, description, gradient = "gradient-primary" }) {
+  return (
+    <div className="card-elevated p-4 md:p-6 text-center group">
+      <div className={`w-12 h-12 md:w-16 md:h-16 ${gradient} rounded-xl md:rounded-2xl flex items-center justify-center mx-auto mb-3 md:mb-4 shadow-lg group-hover:shadow-glow transition-all duration-300`}>
+        <span className="text-2xl md:text-3xl">{icon}</span>
+      </div>
+      <h3 className="heading-3 mb-2 md:mb-3 text-lg md:text-xl lg:text-2xl">{title}</h3>
+      <p className="text-body text-xs md:text-sm">{description}</p>
+    </div>
+  );
+}
+
+// ---------------------
+// Main App
+// ---------------------
+export default function App() {
+  const wallets = useMemo(
+    () => [
+      new PhantomWalletAdapter(),
+      new SolflareWalletAdapter({ network: NETWORK }),
+      new TorusWalletAdapter(),
+      new CoinbaseWalletAdapter(),
+      // Temporarily remove problematic adapters
+      // new LedgerWalletAdapter(),
+      // new SolanaMobileWalletAdapter(),
+    ].filter(Boolean),
+    []
+  );
+
+  const endpoint = RPC_ENDPOINT;
+  const [config, setConfig] = useState(null);
+  
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/config`);
+        if (res.ok) {
+          setConfig(await res.json());
+        }
+      } catch (e) {
+        console.warn("Could not fetch config:", e);
+      }
+    })();
+  }, []);
+
+  const handleVerify = (result) => {
+    console.log("verify result", result);
+    if (result.has_nft) {
+      // Show success message or redirect
+    }
+  };
 
   return (
-    <ConnectionProvider endpoint={RPC_ENDPOINT}>
+    <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
-          <div className="App">
-            <header className="App-header">
-              <div className="container mx-auto px-4 py-8">
-                <WalletPanel />
-              </div>
-            </header>
+          <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+            {/* Animated Background */}
+            <div className="fixed inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute top-20 left-20 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl animate-float"></div>
+              <div className="absolute top-40 right-20 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse-slow"></div>
+              <div className="absolute bottom-20 left-1/2 w-80 h-80 bg-pink-500/20 rounded-full blur-3xl animate-bounce-slow"></div>
+            </div>
+
+            <div className="relative z-10 container-responsive py-8 md:py-16 lg:py-24">
+              {/* Header */}
+              <header className="text-center mb-8 md:mb-16">
+                <div className="inline-flex items-center justify-center w-16 h-16 md:w-24 md:h-24 bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 rounded-2xl md:rounded-3xl mb-6 md:mb-8 shadow-2xl hover:shadow-glow transition-all duration-300">
+                  <span className="text-3xl md:text-5xl">🔐</span>
+                </div>
+                <h1 className="heading-1 mb-4 md:mb-6 text-2xl md:text-4xl lg:text-5xl">Meta Betties — Verification Portal</h1>
+                <p className="text-body text-lg md:text-xl max-w-3xl mx-auto px-4">
+                  Secure NFT verification for Telegram access • Professional & Mobile friendly
+                </p>
+                
+                {config?.version && (
+                  <div className="mt-4 md:mt-6 inline-flex items-center space-x-2 bg-white/10 backdrop-blur-sm rounded-full px-3 md:px-4 py-2 border border-white/20">
+                    <span className="text-caption text-xs md:text-sm">Server Version</span>
+                    <span className="font-semibold text-white text-sm md:text-base">v{config.version}</span>
+                  </div>
+                )}
+              </header>
+
+              {/* Main Content */}
+              <main className="space-y-12">
+                <WalletPanel onVerify={handleVerify} />
+
+                {/* Features Section */}
+                <section className="space-component">
+                  <h2 className="heading-2 text-center mb-8 md:mb-12 text-xl md:text-2xl lg:text-3xl">How It Works</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                    <FeatureCard
+                      icon="🔗"
+                      title="Connect Wallet"
+                      description="Connect your Solana wallet (Phantom, Solflare, Torus, Coinbase)"
+                      gradient="gradient-primary"
+                    />
+                    <FeatureCard
+                      icon="✅"
+                      title="Verify NFT"
+                      description="Click Verify NFT. App calls backend /api/verify-nft endpoint"
+                      gradient="gradient-success"
+                    />
+                    <FeatureCard
+                      icon="🤖"
+                      title="Backend Check"
+                      description="Backend checks Helius (or RPC) & sends webhook to Telegram bot if verified"
+                      gradient="gradient-warning"
+                    />
+                    <FeatureCard
+                      icon="📱"
+                      title="Telegram Access"
+                      description="Telegram bot grants access to private group automatically"
+                      gradient="gradient-info"
+                    />
+                  </div>
+                </section>
+
+              </main>
+
+              {/* Footer */}
+              <footer className="text-center mt-12 md:mt-20">
+                <div className="card p-6 md:p-8">
+                  <p className="text-caption mb-3 md:mb-4 text-xs md:text-sm">
+                    © {new Date().getFullYear()} Meta Betties Verification Portal
+                  </p>
+                  
+                  {/* LOCKED DEVELOPER CREDIT - DO NOT REMOVE */}
+                  <div className="developer-credit-locked" data-protected="true" data-developer="mushfiqur-rahaman" data-version="1.0" data-locked="true">
+                    <p className="text-body mb-3 md:mb-4 text-sm md:text-base">
+                      Developer: <a href="https://i-am-mushfiqur.netlify.app/" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-300 hover:text-blue-200 transition-colors underline">Mushfiqur Rahaman</a>
+                    </p>
+                  </div>
+                  
+                  {/* Additional Protection Layer */}
+                  <div className="hidden" data-protection="developer-credit-backup">
+                    <p className="text-body text-sm md:text-base">
+                      Developer: <a href="https://i-am-mushfiqur.netlify.app/" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-300">Mushfiqur Rahaman</a>
+                    </p>
+                  </div>
+                </div>
+              </footer>
+            </div>
           </div>
         </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
   );
 }
-
-export default App;
