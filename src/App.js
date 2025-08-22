@@ -19,13 +19,9 @@ import {
   CoinbaseWalletAdapter
 } from "@solana/wallet-adapter-wallets";
 
-// Reown AppKit imports for better mobile support
-// import { createAppKit } from '@reown/appkit/react';
-// import { SolanaAdapter } from '@reown/appkit-adapter-solana';
-// import { solana } from '@reown/appkit/networks';
-
-// Temporarily comment out problematic mobile adapter
-// import { SolanaMobileWalletAdapter } from "@solana-mobile/wallet-adapter-mobile";
+// Import proper encryption libraries for Phantom deep links
+import nacl from 'tweetnacl';
+import bs58 from 'bs58';
 
 import "@solana/wallet-adapter-react-ui/styles.css";
 import "./styles.css";
@@ -180,35 +176,178 @@ function WalletPanel({ onVerify }) {
 
   const walletAddress = publicKey ? publicKey.toBase58() : null;
 
-  // Generate encryption public key for Phantom deep links
+  // Generate proper encryption key pair for Phantom deep links
   const generatePhantomEncryptionKey = () => {
     try {
-      // Create a more secure encryption key for Phantom
-      const array = new Uint8Array(32);
-      if (window.crypto && window.crypto.getRandomValues) {
-        // Use crypto.getRandomValues if available (more secure)
-        window.crypto.getRandomValues(array);
-      } else {
-        // Fallback to Math.random (less secure but functional)
-        for (let i = 0; i < array.length; i++) {
-          array[i] = Math.floor(Math.random() * 256);
-        }
+      // Generate proper keypair using nacl.box.keyPair()
+      const keypair = nacl.box.keyPair();
+      
+      // Return the public key encoded in base58 (Phantom expects base58)
+      const publicKey = bs58.encode(keypair.publicKey);
+      
+      console.log("🔐 Generated Phantom encryption public key:", publicKey);
+      
+      // Store the keypair for later use (you might need the private key for decryption)
+      if (!window.phantomKeypair) {
+        window.phantomKeypair = keypair;
       }
       
-      // Convert to base58-like string (Phantom expects base58)
-      const base58Chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-      let result = '';
-      for (let i = 0; i < array.length; i++) {
-        result += base58Chars[array[i] % base58Chars.length];
-      }
-      
-      return result;
+      return publicKey;
     } catch (error) {
-      console.warn("Error generating encryption key, using fallback:", error);
-      // Fallback to simple generation
+      console.error("❌ Error generating Phantom encryption key:", error);
+      
+      // Fallback to simple generation if nacl fails
       const timestamp = Date.now().toString();
       const random = Math.random().toString(36).substring(2);
       return btoa(timestamp + random).substring(0, 32);
+    }
+  };
+
+  // App metadata for Phantom deep links
+  const getAppMetadata = () => {
+    return {
+      name: "Meta Betties NFT Verification",
+      url: "https://admin-q2j7.onrender.com",
+      description: "NFT verification portal for Meta Betties community",
+      icon: "https://admin-q2j7.onrender.com/favicon.ico", // You can add a favicon
+      cluster: "mainnet-beta"
+    };
+  };
+
+  // Handle redirect back from Phantom with wallet info
+  const handlePhantomRedirect = (publicKey, signature) => {
+    try {
+      console.log("🔄 Handling Phantom redirect with wallet info...");
+      console.log("🔑 Public Key:", publicKey);
+      console.log("✍️ Signature:", signature);
+      
+      if (publicKey) {
+        // Update UI to show connected wallet
+        setStatus({ 
+          type: "success", 
+          message: `🎉 Phantom wallet connected! Address: ${shortAddress(publicKey)}` 
+        });
+        
+        // Store wallet info for later use
+        if (!window.phantomWalletInfo) {
+          window.phantomWalletInfo = {
+            publicKey: publicKey,
+            signature: signature,
+            connectedAt: new Date().toISOString(),
+            walletType: 'Phantom'
+          };
+        }
+        
+        // Update connection state
+        setMobileWalletConnecting(false);
+        setConnectionAttempts(0);
+        
+        // Show success message with wallet address
+        setTimeout(() => {
+          setStatus({ 
+            type: "success", 
+            message: `🎉 Wallet connected successfully! Address: ${shortAddress(publicKey)}` 
+          });
+        }, 2000);
+        
+        console.log("✅ Phantom redirect handled successfully");
+        return true;
+      } else {
+        console.warn("⚠️ No public key in Phantom redirect");
+        setStatus({ 
+          type: "warning", 
+          message: "⚠️ Wallet connection incomplete. Please try again." 
+        });
+        return false;
+      }
+    } catch (error) {
+      console.error("❌ Error handling Phantom redirect:", error);
+      setStatus({ 
+        type: "error", 
+        message: "❌ Error processing wallet connection. Please try again." 
+      });
+      return false;
+    }
+  };
+
+  // Universal wallet info handler for all wallet types
+  const handleWalletInfo = (publicKey, signature, walletType = 'Unknown') => {
+    try {
+      console.log(`🔄 Handling ${walletType} wallet info...`);
+      console.log("🔑 Public Key:", publicKey);
+      console.log("✍️ Signature:", signature);
+      console.log("📱 Wallet Type:", walletType);
+      
+      if (publicKey) {
+        // Update UI to show connected wallet
+        setStatus({ 
+          type: "success", 
+          message: `🎉 ${walletType} wallet connected! Address: ${shortAddress(publicKey)}` 
+        });
+        
+        // Store universal wallet info
+        if (!window.universalWalletInfo) {
+          window.universalWalletInfo = {
+            publicKey: publicKey,
+            signature: signature,
+            connectedAt: new Date().toISOString(),
+            walletType: walletType
+          };
+        }
+        
+        // Also store wallet-specific info for backward compatibility
+        if (walletType.toLowerCase() === 'phantom') {
+          window.phantomWalletInfo = {
+            publicKey: publicKey,
+            signature: signature,
+            connectedAt: new Date().toISOString(),
+            walletType: walletType
+          };
+        } else if (walletType.toLowerCase() === 'solflare') {
+          window.solflareWalletInfo = {
+            publicKey: publicKey,
+            signature: signature,
+            connectedAt: new Date().toISOString(),
+            walletType: walletType
+          };
+        } else if (walletType.toLowerCase() === 'coinbase') {
+          window.coinbaseWalletInfo = {
+            publicKey: publicKey,
+            signature: signature,
+            connectedAt: new Date().toISOString(),
+            walletType: walletType
+          };
+        }
+        
+        // Update connection state
+        setMobileWalletConnecting(false);
+        setConnectionAttempts(0);
+        
+        // Show success message with wallet address
+        setTimeout(() => {
+          setStatus({ 
+            type: "success", 
+            message: `🎉 ${walletType} wallet connected successfully! Address: ${shortAddress(publicKey)}` 
+          });
+        }, 2000);
+        
+        console.log(`✅ ${walletType} wallet info handled successfully`);
+        return true;
+      } else {
+        console.warn(`⚠️ No public key in ${walletType} wallet info`);
+        setStatus({ 
+          type: "warning", 
+          message: `⚠️ ${walletType} wallet connection incomplete. Please try again.` 
+        });
+        return false;
+      }
+    } catch (error) {
+      console.error(`❌ Error handling ${walletType} wallet info:`, error);
+      setStatus({ 
+        type: "error", 
+        message: `❌ Error processing ${walletType} wallet connection. Please try again.` 
+      });
+      return false;
     }
   };
 
@@ -299,15 +438,132 @@ function WalletPanel({ onVerify }) {
         message: `📱 Telegram ID automatically fetched: ${tgIdFromUrl}` 
       });
     }
+    
+    // Check for Phantom redirect parameters
+    const phantomPublicKey = urlParams.get('phantom_public_key') || urlParams.get('public_key') || urlParams.get('pk');
+    const phantomSignature = urlParams.get('phantom_signature') || urlParams.get('signature') || urlParams.get('sig');
+    const phantomRedirect = urlParams.get('phantom_redirect') || urlParams.get('redirect') || urlParams.get('rd');
+    
+    if (phantomPublicKey && phantomSignature) {
+      console.log("🔄 Phantom redirect detected with wallet info");
+      console.log("🔑 Public Key:", phantomPublicKey);
+      console.log("✍️ Signature:", phantomSignature);
+      console.log("🔄 Redirect:", phantomRedirect);
+      
+      // Handle the Phantom redirect
+      const success = handlePhantomRedirect(phantomPublicKey, phantomSignature);
+      
+      if (success) {
+        // Clear the URL parameters after successful handling
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.delete('phantom_public_key');
+        newUrl.searchParams.delete('phantom_signature');
+        newUrl.searchParams.delete('phantom_redirect');
+        newUrl.searchParams.delete('public_key');
+        newUrl.searchParams.delete('signature');
+        newUrl.searchParams.delete('redirect');
+        newUrl.searchParams.delete('pk');
+        newUrl.searchParams.delete('sig');
+        newUrl.searchParams.delete('rd');
+        
+        // Update URL without page reload
+        window.history.replaceState({}, '', newUrl.toString());
+        console.log("✅ URL parameters cleared after successful redirect handling");
+      }
+    }
+    
+    // Check for universal wallet redirect parameters (all wallet types)
+    const universalPublicKey = urlParams.get('wallet_public_key') || urlParams.get('pk') || urlParams.get('public_key');
+    const universalSignature = urlParams.get('wallet_signature') || urlParams.get('sig') || urlParams.get('signature');
+    const universalWalletType = urlParams.get('wallet_type') || urlParams.get('type') || urlParams.get('wallet');
+    const universalRedirect = urlParams.get('wallet_redirect') || urlParams.get('redirect') || urlParams.get('rd');
+    
+    if (universalPublicKey && universalSignature && universalWalletType) {
+      console.log("🔄 Universal wallet redirect detected");
+      console.log("🔑 Public Key:", universalPublicKey);
+      console.log("✍️ Signature:", universalSignature);
+      console.log("📱 Wallet Type:", universalWalletType);
+      console.log("🔄 Redirect:", universalRedirect);
+      
+      // Handle the universal wallet redirect
+      const success = handleWalletInfo(universalPublicKey, universalSignature, universalWalletType);
+      
+      if (success) {
+        // Clear the URL parameters after successful handling
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.delete('wallet_public_key');
+        newUrl.searchParams.delete('wallet_signature');
+        newUrl.searchParams.delete('wallet_type');
+        newUrl.searchParams.delete('wallet_redirect');
+        newUrl.searchParams.delete('pk');
+        newUrl.searchParams.delete('sig');
+        newUrl.searchParams.delete('type');
+        newUrl.searchParams.delete('wallet');
+        newUrl.searchParams.delete('redirect');
+        newUrl.searchParams.delete('rd');
+        
+        // Update URL without page reload
+        window.history.replaceState({}, '', newUrl.toString());
+        console.log("✅ Universal wallet URL parameters cleared after successful redirect handling");
+      }
+    }
+    
+    // Check for Solflare specific redirect parameters
+    const solflarePublicKey = urlParams.get('solflare_public_key') || urlParams.get('sf_pk');
+    const solflareSignature = urlParams.get('solflare_signature') || urlParams.get('sf_sig');
+    
+    if (solflarePublicKey && solflareSignature) {
+      console.log("🔄 Solflare redirect detected with wallet info");
+      console.log("🔑 Public Key:", solflarePublicKey);
+      console.log("✍️ Signature:", solflareSignature);
+      
+      // Handle the Solflare redirect
+      const success = handleWalletInfo(solflarePublicKey, solflareSignature, 'Solflare');
+      
+      if (success) {
+        // Clear the URL parameters after successful handling
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.delete('solflare_public_key');
+        newUrl.searchParams.delete('solflare_signature');
+        newUrl.searchParams.delete('sf_pk');
+        newUrl.searchParams.delete('sf_sig');
+        
+        // Update URL without page reload
+        window.history.replaceState({}, '', newUrl.toString());
+        console.log("✅ Solflare URL parameters cleared after successful redirect handling");
+      }
+    }
+    
+    // Check for Coinbase specific redirect parameters
+    const coinbasePublicKey = urlParams.get('coinbase_public_key') || urlParams.get('cb_pk');
+    const coinbaseSignature = urlParams.get('coinbase_signature') || urlParams.get('cb_sig');
+    
+    if (coinbasePublicKey && coinbaseSignature) {
+      console.log("🔄 Coinbase redirect detected with wallet info");
+      console.log("🔑 Public Key:", coinbasePublicKey);
+      console.log("✍️ Signature:", coinbaseSignature);
+      
+      // Handle the Coinbase redirect
+      const success = handleWalletInfo(coinbasePublicKey, coinbaseSignature, 'Coinbase');
+      
+      if (success) {
+        // Clear the URL parameters after successful handling
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.delete('coinbase_public_key');
+        newUrl.searchParams.delete('coinbase_signature');
+        newUrl.searchParams.delete('cb_pk');
+        newUrl.searchParams.delete('cb_sig');
+        
+        // Update URL without page reload
+        window.history.replaceState({}, '', newUrl.toString());
+        console.log("✅ Coinbase URL parameters cleared after successful redirect handling");
+      }
+    }
   }, []);
 
   // Save auto-connect preference when wallet connects
   useEffect(() => {
     if (connected && publicKey) {
-      // Save that user wants auto-connect for future sessions
-      localStorage.setItem('wallet_auto_connect', 'true');
-      console.log("💾 Auto-connect preference saved for future sessions");
-      
       // Show success message when wallet connects
       const walletName = mobileWalletConnecting ? "Mobile wallet" : "Wallet";
       setStatus({ 
@@ -344,27 +600,79 @@ function WalletPanel({ onVerify }) {
     setWalletType(selectedWalletType);
     setMobileWalletConnecting(true);
     setConnectionAttempts(0);
+    
+    // Show user confirmation first
+    setStatus({ 
+      type: "info", 
+      message: `📱 ${selectedWalletType} wallet selected. Click "Connect" to proceed...` 
+    });
+    
+    // Add a small delay to let user see the confirmation
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Ask for user confirmation before proceeding
+    const userConfirmed = window.confirm(
+      `Do you want to connect to ${selectedWalletType} wallet?\n\n` +
+      `This will open the ${selectedWalletType} app and request connection permission.`
+    );
+    
+    if (!userConfirmed) {
+      console.log(`📱 User cancelled ${selectedWalletType} connection`);
+      setMobileWalletConnecting(false);
+      setStatus({ 
+        type: "info", 
+        message: "🔌 Wallet connection cancelled by user." 
+      });
+      return;
+    }
+    
+    // User confirmed, proceed with connection
     setStatus({ type: "info", message: `📱 Opening ${selectedWalletType} wallet...` });
     
     try {
       // Enhanced deep link approach for mobile wallet connection
       let deepLinks = [];
       let fallbackUrl = '';
+      let walletMetadata = null;
       
       // Generate multiple deep link formats for better compatibility
       switch (selectedWalletType.toLowerCase()) {
         case 'phantom':
           // Phantom official deep link format according to docs.phantom.com
-          const phantomAppUrl = encodeURIComponent(window.location.origin);
-          const phantomRedirectLink = encodeURIComponent(window.location.href);
-          const phantomCluster = 'mainnet-beta'; // Default to mainnet
+          // Use specific app URL for better integration
+          walletMetadata = {
+            name: "Meta Betties NFT Verification",
+            url: "https://admin-q2j7.onrender.com",
+            description: "NFT verification portal for Meta Betties community",
+            icon: "https://admin-q2j7.onrender.com/favicon.ico",
+            cluster: "mainnet-beta",
+            deepLinkBase: "https://phantom.app/ul/v1/connect"
+          };
           
-          // Generate encryption public key for Phantom
+          const phantomAppUrl = encodeURIComponent(walletMetadata.url);
+          const phantomRedirectLink = encodeURIComponent(window.location.href);
+          const phantomCluster = walletMetadata.cluster;
+          
+          // Generate proper encryption public key for Phantom
           const dappEncryptionKey = generatePhantomEncryptionKey();
           
+          // Build official Phantom deep link with proper parameters
+          const officialPhantomLink = new URL(walletMetadata.deepLinkBase);
+          officialPhantomLink.searchParams.append("app_url", phantomAppUrl);
+          officialPhantomLink.searchParams.append("dapp_encryption_public_key", dappEncryptionKey);
+          officialPhantomLink.searchParams.append("redirect_link", phantomRedirectLink);
+          officialPhantomLink.searchParams.append("cluster", phantomCluster);
+          
+          console.log("🔗 Official Phantom deep link for Meta Betties:", officialPhantomLink.toString());
+          console.log("📱 App Name:", walletMetadata.name);
+          console.log("📱 App URL:", phantomAppUrl);
+          console.log("📱 Redirect Link:", phantomRedirectLink);
+          console.log("🔐 Encryption Key:", dappEncryptionKey);
+          console.log("🌐 Cluster:", phantomCluster);
+          
           deepLinks = [
-            // Official Phantom deep link format
-            `https://phantom.app/ul/v1/connect?app_url=${phantomAppUrl}&dapp_encryption_public_key=${dappEncryptionKey}&redirect_link=${phantomRedirectLink}&cluster=${phantomCluster}`,
+            // Official Phantom deep link format (primary)
+            officialPhantomLink.toString(),
             // Alternative formats for better compatibility
             `https://phantom.app/ul/browse/${encodeURIComponent(window.location.href)}`,
             `https://phantom.app/ul/browse/${window.location.href}`,
@@ -375,28 +683,96 @@ function WalletPanel({ onVerify }) {
           ];
           fallbackUrl = 'https://phantom.app/';
           break;
+          
         case 'solflare':
-          // Solflare multiple deep link formats
+          // Solflare professional deep link format
+          walletMetadata = {
+            name: "Meta Betties NFT Verification",
+            url: "https://admin-q2j7.onrender.com",
+            description: "NFT verification portal for Meta Betties community",
+            icon: "https://admin-q2j7.onrender.com/favicon.ico",
+            cluster: "mainnet-beta",
+            deepLinkBase: "https://solflare.com/ul/v1/connect"
+          };
+          
+          const solflareAppUrl = encodeURIComponent(walletMetadata.url);
+          const solflareRedirectLink = encodeURIComponent(window.location.href);
+          const solflareCluster = walletMetadata.cluster;
+          
+          // Build Solflare deep link with proper parameters
+          const officialSolflareLink = new URL(walletMetadata.deepLinkBase);
+          officialSolflareLink.searchParams.append("app_url", solflareAppUrl);
+          officialSolflareLink.searchParams.append("redirect_link", solflareRedirectLink);
+          officialSolflareLink.searchParams.append("cluster", solflareCluster);
+          
+          console.log("🔗 Official Solflare deep link for Meta Betties:", officialSolflareLink.toString());
+          console.log("📱 App Name:", walletMetadata.name);
+          console.log("📱 App URL:", solflareAppUrl);
+          console.log("📱 Redirect Link:", solflareRedirectLink);
+          console.log("🌐 Cluster:", solflareCluster);
+          
           deepLinks = [
+            // Official Solflare deep link format (primary)
+            officialSolflareLink.toString(),
+            // Alternative formats for better compatibility
             `solflare://ul/browse/${encodeURIComponent(window.location.href)}`,
             `https://solflare.com/ul/browse/${encodeURIComponent(window.location.href)}`,
             `https://solflare.com/ul/browse/${window.location.href}`,
+            // Fallback URLs
             `https://solflare.com/`,
             `https://solflare.com/ul/`
           ];
           fallbackUrl = 'https://solflare.com/';
           break;
+          
         case 'coinbase':
-          // Coinbase multiple deep link formats
+          // Coinbase professional deep link format
+          walletMetadata = {
+            name: "Meta Betties NFT Verification",
+            url: "https://admin-q2j7.onrender.com",
+            description: "NFT verification portal for Meta Betties community",
+            icon: "https://admin-q2j7.onrender.com/favicon.ico",
+            cluster: "mainnet-beta",
+            deepLinkBase: "https://wallet.coinbase.com/wallet-selector"
+          };
+          
+          const coinbaseAppUrl = encodeURIComponent(walletMetadata.url);
+          const coinbaseRedirectLink = encodeURIComponent(window.location.href);
+          const coinbaseCluster = walletMetadata.cluster;
+          
+          // Build Coinbase deep link with proper parameters
+          const officialCoinbaseLink = new URL(walletMetadata.deepLinkBase);
+          officialCoinbaseLink.searchParams.append("redirect_uri", coinbaseRedirectLink);
+          officialCoinbaseLink.searchParams.append("app_url", coinbaseAppUrl);
+          officialCoinbaseLink.searchParams.append("cluster", coinbaseCluster);
+          
+          console.log("🔗 Official Coinbase deep link for Meta Betties:", officialCoinbaseLink.toString());
+          console.log("📱 App Name:", walletMetadata.name);
+          console.log("📱 App URL:", coinbaseAppUrl);
+          console.log("📱 Redirect Link:", coinbaseRedirectLink);
+          console.log("🌐 Cluster:", coinbaseCluster);
+          
           deepLinks = [
+            // Official Coinbase deep link format (primary)
+            officialCoinbaseLink.toString(),
+            // Alternative formats for better compatibility
             `coinbase-wallet://wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`,
             `https://wallet.coinbase.com/wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`,
+            // Fallback URLs
             `https://wallet.coinbase.com/`,
             `https://wallet.coinbase.com/wallet-selector`
           ];
           fallbackUrl = 'https://wallet.coinbase.com/';
           break;
+          
         default:
+          walletMetadata = {
+            name: "Meta Betties NFT Verification",
+            url: "https://admin-q2j7.onrender.com",
+            description: "NFT verification portal for Meta Betties community",
+            icon: "https://admin-q2j7.onrender.com/favicon.ico",
+            cluster: "mainnet-beta"
+          };
           deepLinks = [window.location.href];
           fallbackUrl = window.location.href;
           break;
@@ -411,39 +787,149 @@ function WalletPanel({ onVerify }) {
         let connectionAttempted = false;
         
         // Method 1: Try direct wallet detection first (if available)
-        if (selectedWalletType.toLowerCase() === 'phantom' && window.solana?.isPhantom) {
+        if (selectedWalletType.toLowerCase() === 'phantom' && (window.solana?.isPhantom || window.phantom?.solana?.isPhantom || window.phantom?.solana || window.solana)) {
           try {
-            console.log("📱 Phantom detected, attempting direct connection...");
-            await window.solana.connect();
-            connectionAttempted = true;
-            console.log("📱 Phantom connected via direct method");
+            console.log("📱 Phantom detected, asking user permission for direct connection...");
+            
+            // Ask user permission before direct connection
+            const directConnectConfirmed = window.confirm(
+              "Phantom wallet is detected on your device.\n\n" +
+              "Do you want to connect directly to Phantom?\n\n" +
+              "This will request connection permission from your wallet."
+            );
+            
+            if (directConnectConfirmed) {
+              // Try multiple Phantom connection methods
+              let connected = false;
+              
+              if (window.solana?.isPhantom) {
+                try {
+                  await window.solana.connect();
+                  connected = true;
+                  console.log("📱 Phantom connected via window.solana.connect()");
+                } catch (error) {
+                  console.log("📱 window.solana.connect() failed:", error);
+                }
+              }
+              
+              if (!connected && window.phantom?.solana?.connect) {
+                try {
+                  await window.phantom.solana.connect();
+                  connected = true;
+                  console.log("📱 Phantom connected via window.phantom.solana.connect()");
+                } catch (error) {
+                  console.log("📱 window.phantom.solana.connect() failed:", error);
+                }
+              }
+              
+              if (connected) {
+                connectionAttempted = true;
+                console.log("📱 Phantom connected via direct method");
+              }
+            } else {
+              console.log("📱 User declined direct Phantom connection");
+            }
           } catch (error) {
             console.log("📱 Direct Phantom connection failed:", error);
           }
         }
         
-        // Phantom deep link response handling
+        // Phantom deep link response handling with improved mobile integration
         if (selectedWalletType.toLowerCase() === 'phantom' && !connectionAttempted) {
           try {
             console.log("📱 Setting up Phantom deep link response handler...");
             
-            // Listen for Phantom deep link response
+            // Set up custom redirect scheme handler for return flow
+            const handleCustomRedirect = (event) => {
+              console.log("📱 Custom redirect event received:", event);
+              
+              // Handle custom scheme redirects (e.g., mydapp://onConnect)
+              if (event.data && event.data.type === 'phantom_redirect') {
+                console.log("📱 Phantom redirect received:", event.data);
+                // Process the redirect data
+              }
+            };
+            
+            // Set up page visibility change handler for mobile app return
+            const handleVisibilityChange = () => {
+              if (!document.hidden) {
+                console.log("📱 User returned from Phantom app, checking connection status...");
+                
+                // Check if wallet is now connected
+                setTimeout(() => {
+                  if (window.solana?.isPhantom && window.solana.isConnected) {
+                    console.log("📱 Phantom wallet connected after app return!");
+                    const walletAddress = window.solana.publicKey?.toBase58();
+                    setStatus({ 
+                      type: "success", 
+                      message: `🎉 Phantom wallet connected! Address: ${shortAddress(walletAddress)}` 
+                    });
+                    connectionAttempted = true;
+                  } else if (window.phantom?.solana?.isConnected) {
+                    console.log("📱 Phantom wallet connected after app return (alternative method)!");
+                    const walletAddress = window.phantom.solana.publicKey?.toBase58();
+                    setStatus({ 
+                      type: "success", 
+                      message: `🎉 Phantom wallet connected! Address: ${shortAddress(walletAddress)}` 
+                    });
+                    connectionAttempted = true;
+                  } else {
+                    console.log("📱 Phantom wallet not connected after app return");
+                    setStatus({ 
+                      type: "info", 
+                      message: "📱 Phantom app opened. Please approve the connection and return here." 
+                    });
+                  }
+                }, 1000);
+              }
+            };
+            
+            // Add visibility change listener
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            
+            // Add custom redirect listener
+            window.addEventListener('message', handleCustomRedirect);
+            
+            // Listen for Phantom deep link response with public key and signature
             const handlePhantomResponse = (event) => {
               if (event.data && event.data.type === 'phantom_deeplink_response') {
                 console.log("📱 Phantom deep link response received:", event.data);
                 
-                // Handle the response data
+                // Handle the response data with public key and signature
                 if (event.data.data) {
                   try {
-                    // Process the encrypted data (simplified for now)
+                    // Process the encrypted data from Phantom
                     console.log("📱 Phantom connection successful, processing response...");
-                    setStatus({ 
-                      type: "success", 
-                      message: "🎉 Phantom wallet connected via deep link!" 
-                    });
-                    connectionAttempted = true;
+                    
+                    // Extract public key and signature from Phantom response
+                    const { publicKey, signature } = event.data.data;
+                    
+                    if (publicKey) {
+                      console.log("🔑 Phantom returned public key:", publicKey);
+                      console.log("✍️ Phantom returned signature:", signature);
+                      
+                      // Use the dedicated redirect handler
+                      const success = handlePhantomRedirect(publicKey, signature);
+                      
+                      if (success) {
+                        connectionAttempted = true;
+                        console.log("✅ Phantom connection completed via redirect handler");
+                      }
+                      
+                    } else {
+                      console.warn("⚠️ No public key in Phantom response");
+                      setStatus({ 
+                        type: "warning", 
+                        message: "⚠️ Phantom connection incomplete. Please try again." 
+                      });
+                    }
+                    
                   } catch (error) {
                     console.error("📱 Error processing Phantom response:", error);
+                    setStatus({ 
+                      type: "error", 
+                      message: "❌ Error processing wallet connection. Please try again." 
+                    });
                   }
                 }
                 
@@ -458,6 +944,8 @@ function WalletPanel({ onVerify }) {
             // Cleanup after 30 seconds
             setTimeout(() => {
               window.removeEventListener('message', handlePhantomResponse);
+              window.removeEventListener('message', handleCustomRedirect);
+              document.removeEventListener('visibilitychange', handleVisibilityChange);
             }, 30000);
             
           } catch (error) {
@@ -467,10 +955,22 @@ function WalletPanel({ onVerify }) {
         
         if (selectedWalletType.toLowerCase() === 'solflare' && window.solflare?.isSolflare) {
           try {
-            console.log("📱 Solflare detected, attempting direct connection...");
-            await window.solflare.connect();
-            connectionAttempted = true;
-            console.log("📱 Solflare connected via direct method");
+            console.log("📱 Solflare detected, asking user permission for direct connection...");
+            
+            // Ask user permission before direct connection
+            const directConnectConfirmed = window.confirm(
+              "Solflare wallet is detected on your device.\n\n" +
+              "Do you want to connect directly to Solflare?\n\n" +
+              "This will request connection permission from your wallet."
+            );
+            
+            if (directConnectConfirmed) {
+              await window.solflare.connect();
+              connectionAttempted = true;
+              console.log("📱 Solflare connected via direct method");
+            } else {
+              console.log("📱 User declined direct Solflare connection");
+            }
           } catch (error) {
             console.log("📱 Direct Solflare connection failed:", error);
           }
@@ -478,10 +978,22 @@ function WalletPanel({ onVerify }) {
         
         if (selectedWalletType.toLowerCase() === 'coinbase' && window.coinbaseWallet) {
           try {
-            console.log("📱 Coinbase detected, attempting direct connection...");
-            await window.coinbaseWallet.requestAccounts();
-            connectionAttempted = true;
-            console.log("📱 Coinbase connected via direct method");
+            console.log("📱 Coinbase detected, asking user permission for direct connection...");
+            
+            // Ask user permission before direct connection
+            const directConnectConfirmed = window.confirm(
+              "Coinbase wallet is detected on your device.\n\n" +
+              "Do you want to connect directly to Coinbase?\n\n" +
+              "This will request connection permission from your wallet."
+            );
+            
+            if (directConnectConfirmed) {
+              await window.coinbaseWallet.requestAccounts();
+              connectionAttempted = true;
+              console.log("📱 Coinbase connected via direct method");
+            } else {
+              console.log("📱 User declined direct Coinbase connection");
+            }
           } catch (error) {
             console.log("📱 Direct Coinbase connection failed:", error);
           }
@@ -506,6 +1018,33 @@ function WalletPanel({ onVerify }) {
             console.log(`📱 Trying deep link ${i + 1}/${deepLinks.length}:`, deepLink);
             
             try {
+              // Validate deep link format
+              if (i === 0 && selectedWalletType.toLowerCase() === 'phantom') {
+                // Validate official Phantom deep link
+                try {
+                  const url = new URL(deepLink);
+                  if (url.hostname !== 'phantom.app' || !url.pathname.includes('/ul/v1/connect')) {
+                    console.warn("⚠️ Invalid official Phantom deep link format:", deepLink);
+                    continue;
+                  }
+                  
+                  // Check required parameters
+                  const appUrl = url.searchParams.get('app_url');
+                  const dappKey = url.searchParams.get('dapp_encryption_public_key');
+                  const redirectLink = url.searchParams.get('redirect_link');
+                  
+                  if (!appUrl || !dappKey || !redirectLink) {
+                    console.warn("⚠️ Missing required parameters in official Phantom deep link");
+                    continue;
+                  }
+                  
+                  console.log("✅ Official Phantom deep link validation passed");
+                } catch (validationError) {
+                  console.warn("⚠️ Deep link validation failed:", validationError);
+                  continue;
+                }
+              }
+              
               // Try to open deep link
               const newWindow = window.open(deepLink, '_blank');
               
@@ -515,15 +1054,40 @@ function WalletPanel({ onVerify }) {
                 
                 // Special status for Phantom
                 if (selectedWalletType.toLowerCase() === 'phantom') {
-                  setStatus({ 
-                    type: "info", 
-                    message: "📱 Phantom app opened! Please approve the connection request..." 
-                  });
+                  if (i === 0) {
+                    setStatus({ 
+                      type: "info", 
+                      message: "📱 Phantom app opened with official deep link! Please approve the connection request and return here..." 
+                    });
+                  } else {
+                    setStatus({ 
+                      type: "info", 
+                      message: "📱 Phantom app opened! Please approve the connection request and return here..." 
+                    });
+                  }
+                  
+                  // Set up a timer to check if user returned
+                  setTimeout(() => {
+                    if (!connected && !connectionAttempted) {
+                      setStatus({ 
+                        type: "warning", 
+                        message: "📱 Waiting for Phantom connection... Please approve in the app and return here." 
+                      });
+                    }
+                  }, 3000);
                 }
                 
                 break;
               } else {
                 console.log(`📱 Deep link ${i + 1} failed, trying next...`);
+                
+                // If this is the official Phantom deep link and it failed, show specific message
+                if (selectedWalletType.toLowerCase() === 'phantom' && i === 0) {
+                  setStatus({ 
+                    type: "warning", 
+                    message: "⚠️ Official Phantom deep link failed. Trying alternative methods..." 
+                  });
+                }
               }
               
               // Small delay between attempts
@@ -539,22 +1103,50 @@ function WalletPanel({ onVerify }) {
         // Method 3: Fallback to app store or website
         setTimeout(() => {
           if (!connected && mobileWalletConnecting) {
-            console.log("📱 Connection timeout, opening fallback options");
-            setStatus({ 
-              type: "warning", 
-              message: `⚠️ ${selectedWalletType} connection taking time. Opening fallback options...` 
-            });
+            console.log("📱 Connection timeout, checking wallet status...");
             
-            // Open fallback URL
-            window.open(fallbackUrl, '_blank');
+            // Check if wallet is actually installed but connection failed
+            let walletInstalled = false;
+            if (selectedWalletType.toLowerCase() === 'phantom') {
+              walletInstalled = !!(window.solana?.isPhantom || window.phantom?.solana?.isPhantom || window.phantom?.solana || window.solana);
+            } else if (selectedWalletType.toLowerCase() === 'solflare') {
+              walletInstalled = !!(window.solflare?.isSolflare || window.solflare?.isSolflareWallet || window.solflare);
+            } else if (selectedWalletType.toLowerCase() === 'coinbase') {
+              walletInstalled = !!(window.coinbaseWallet || window.coinbaseWalletExtension);
+            }
             
-            // Show manual connection instructions
-            setTimeout(() => {
+            if (walletInstalled) {
+              // Wallet is installed but connection failed
               setStatus({ 
-                type: "info", 
-                message: `📱 Please check your ${selectedWalletType} app and return here. If not installed, please install from the opened link.` 
+                type: "warning", 
+                message: `⚠️ ${selectedWalletType} is installed but connection failed. Please check the app and try again.` 
               });
-            }, 2000);
+              
+              // Show manual connection instructions
+              setTimeout(() => {
+                setStatus({ 
+                  type: "info", 
+                  message: `📱 Please open ${selectedWalletType} app manually and approve the connection, then return here.` 
+                });
+              }, 3000);
+            } else {
+              // Wallet not detected, suggest installation
+              setStatus({ 
+                type: "warning", 
+                message: `⚠️ ${selectedWalletType} app not responding. Opening fallback options...` 
+              });
+              
+              // Open fallback URL
+              window.open(fallbackUrl, '_blank');
+              
+              // Show manual connection instructions
+              setTimeout(() => {
+                setStatus({ 
+                  type: "info", 
+                  message: `📱 Please install ${selectedWalletType} app and return here to connect manually.` 
+                });
+              }, 2000);
+            }
           }
         }, 10000); // Increased timeout for better UX
         
@@ -774,31 +1366,40 @@ function WalletPanel({ onVerify }) {
       const mobileWallets = [];
       
       try {
-        // Enhanced Phantom detection
+        // Enhanced Phantom detection - multiple methods
         if (window.solana?.isPhantom) {
           mobileWallets.push("Phantom");
-          console.log("📱 Phantom wallet detected on mobile");
+          console.log("📱 Phantom wallet detected via window.solana.isPhantom");
         } else if (window.phantom?.solana?.isPhantom) {
           mobileWallets.push("Phantom");
-          console.log("📱 Phantom wallet detected via alternative method");
+          console.log("📱 Phantom wallet detected via window.phantom.solana.isPhantom");
+        } else if (window.phantom?.solana) {
+          mobileWallets.push("Phantom");
+          console.log("📱 Phantom wallet detected via window.phantom.solana");
+        } else if (window.solana) {
+          mobileWallets.push("Phantom");
+          console.log("📱 Phantom wallet detected via window.solana");
         }
         
         // Enhanced Solflare detection
         if (window.solflare?.isSolflare) {
           mobileWallets.push("Solflare");
-          console.log("📱 Solflare wallet detected on mobile");
+          console.log("📱 Solflare wallet detected via window.solflare.isSolflare");
         } else if (window.solflare?.isSolflareWallet) {
           mobileWallets.push("Solflare");
-          console.log("📱 Solflare wallet detected via alternative method");
+          console.log("📱 Solflare wallet detected via window.solflare.isSolflareWallet");
+        } else if (window.solflare) {
+          mobileWallets.push("Solflare");
+          console.log("📱 Solflare wallet detected via window.solflare");
         }
         
         // Enhanced Coinbase detection
         if (window.coinbaseWallet) {
           mobileWallets.push("Coinbase");
-          console.log("📱 Coinbase wallet detected on mobile");
+          console.log("📱 Coinbase wallet detected via window.coinbaseWallet");
         } else if (window.coinbaseWalletExtension) {
           mobileWallets.push("Coinbase");
-          console.log("📱 Coinbase wallet detected via alternative method");
+          console.log("📱 Coinbase wallet detected via window.coinbaseWalletExtension");
         }
         
         // Check for mobile-specific wallets
@@ -823,20 +1424,20 @@ function WalletPanel({ onVerify }) {
         // Check if any new wallets were installed with enhanced detection
         if (window.solana?.isPhantom || 
             window.phantom?.solana?.isPhantom ||
+            window.phantom?.solana ||
+            window.solana ||
             window.solflare?.isSolflare || 
             window.solflare?.isSolflareWallet ||
+            window.solflare ||
             window.coinbaseWallet || 
             window.coinbaseWalletExtension) {
-          console.log("🎉 New wallet detected! Attempting auto-connection...");
+          console.log("🎉 New wallet detected! User can manually connect when ready.");
           
           // Trigger wallet detection again
           detectMobileWallets();
           
-          // Auto-connect if user has previously connected
-          if (localStorage.getItem('wallet_auto_connect') === 'true') {
-            console.log("🔄 Auto-connecting to newly detected wallet...");
-            // The WalletMultiButton will handle the connection
-          }
+          // Don't auto-connect - let user choose when to connect
+          console.log("📱 Wallet detected but waiting for user to manually connect...");
         }
       } catch (error) {
         console.warn("⚠️ Error checking for new wallets:", error);
@@ -857,6 +1458,33 @@ function WalletPanel({ onVerify }) {
     setWalletType(selectedWalletType);
     setMobileWalletConnecting(true);
     setConnectionAttempts(0);
+    
+    // Show user confirmation first
+    setStatus({ 
+      type: "info", 
+      message: `📱 ${selectedWalletType} fallback connection. Click "Connect" to proceed...` 
+    });
+    
+    // Add a small delay to let user see the confirmation
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Ask for user confirmation before proceeding
+    const userConfirmed = window.confirm(
+      `Do you want to try fallback connection to ${selectedWalletType} wallet?\n\n` +
+      `This will attempt to connect using alternative methods.`
+    );
+    
+    if (!userConfirmed) {
+      console.log(`📱 User cancelled ${selectedWalletType} fallback connection`);
+      setMobileWalletConnecting(false);
+      setStatus({ 
+        type: "info", 
+        message: "🔌 Fallback connection cancelled by user." 
+      });
+      return;
+    }
+    
+    // User confirmed, proceed with fallback connection
     setStatus({ type: "info", message: `📱 Trying fallback connection to ${selectedWalletType}...` });
     
     try {
@@ -875,22 +1503,38 @@ function WalletPanel({ onVerify }) {
         }
       }
       
-      // Method 2: Try Phantom deep link with official format
+      // Method 2: Try wallet deep link with official format
       if (!connectionSuccess && selectedWalletType.toLowerCase() === 'phantom') {
         try {
           console.log("📱 Trying Phantom official deep link format...");
           
-          const phantomAppUrl = encodeURIComponent(window.location.origin);
+          const walletMetadata = {
+            name: "Meta Betties NFT Verification",
+            url: "https://admin-q2j7.onrender.com",
+            description: "NFT verification portal for Meta Betties community",
+            icon: "https://admin-q2j7.onrender.com/favicon.ico",
+            cluster: "mainnet-beta",
+            deepLinkBase: "https://phantom.app/ul/v1/connect"
+          };
+          
+          const phantomAppUrl = encodeURIComponent(walletMetadata.url);
           const phantomRedirectLink = encodeURIComponent(window.location.href);
-          const phantomCluster = 'mainnet-beta';
+          const phantomCluster = walletMetadata.cluster;
           const dappEncryptionKey = generatePhantomEncryptionKey();
           
-          const officialPhantomLink = `https://phantom.app/ul/v1/connect?app_url=${phantomAppUrl}&dapp_encryption_public_key=${dappEncryptionKey}&redirect_link=${phantomRedirectLink}&cluster=${phantomCluster}`;
+          const officialPhantomLink = new URL(walletMetadata.deepLinkBase);
+          officialPhantomLink.searchParams.append("app_url", phantomAppUrl);
+          officialPhantomLink.searchParams.append("dapp_encryption_public_key", dappEncryptionKey);
+          officialPhantomLink.searchParams.append("redirect_link", phantomRedirectLink);
+          officialPhantomLink.searchParams.append("cluster", phantomCluster);
           
-          console.log("📱 Official Phantom deep link:", officialPhantomLink);
+          console.log("📱 Official Phantom deep link for fallback:", officialPhantomLink.toString());
+          console.log("📱 App Name:", walletMetadata.name);
+          console.log("📱 App URL:", phantomAppUrl);
+          console.log("📱 Redirect Link:", phantomRedirectLink);
           
           // Open official deep link
-          const phantomWindow = window.open(officialPhantomLink, '_blank');
+          const phantomWindow = window.open(officialPhantomLink.toString(), '_blank');
           
           if (phantomWindow && !phantomWindow.closed) {
             console.log("📱 Phantom official deep link opened successfully");
@@ -921,7 +1565,139 @@ function WalletPanel({ onVerify }) {
         }
       }
       
-      // Method 3: Try Solflare direct connection
+      // Method 3: Try Solflare deep link with official format
+      if (!connectionSuccess && selectedWalletType.toLowerCase() === 'solflare') {
+        try {
+          console.log("📱 Trying Solflare official deep link format...");
+          
+          const walletMetadata = {
+            name: "Meta Betties NFT Verification",
+            url: "https://admin-q2j7.onrender.com",
+            description: "NFT verification portal for Meta Betties community",
+            icon: "https://admin-q2j7.onrender.com/favicon.ico",
+            cluster: "mainnet-beta",
+            deepLinkBase: "https://solflare.com/ul/v1/connect"
+          };
+          
+          const solflareAppUrl = encodeURIComponent(walletMetadata.url);
+          const solflareRedirectLink = encodeURIComponent(window.location.href);
+          const solflareCluster = walletMetadata.cluster;
+          
+          const officialSolflareLink = new URL(walletMetadata.deepLinkBase);
+          officialSolflareLink.searchParams.append("app_url", solflareAppUrl);
+          officialSolflareLink.searchParams.append("redirect_link", solflareRedirectLink);
+          officialSolflareLink.searchParams.append("cluster", solflareCluster);
+          
+          console.log("📱 Official Solflare deep link for fallback:", officialSolflareLink.toString());
+          console.log("📱 App Name:", walletMetadata.name);
+          console.log("📱 App URL:", solflareAppUrl);
+          console.log("📱 Redirect Link:", solflareRedirectLink);
+          
+          // Open official deep link
+          const solflareWindow = window.open(officialSolflareLink.toString(), '_blank');
+          
+          if (solflareWindow && !solflareWindow.closed) {
+            console.log("📱 Solflare official deep link opened successfully");
+            setStatus({ 
+              type: "info", 
+              message: "📱 Solflare app opened! Please approve the connection..." 
+            });
+            
+            // Wait for user to complete connection
+            setTimeout(() => {
+              if (!connected) {
+                setStatus({ 
+                  type: "warning", 
+                  message: "⚠️ Solflare connection pending. Please check your Solflare app and approve the connection." 
+                });
+              }
+            }, 5000);
+            
+          } else {
+            console.log("📱 Solflare official deep link failed, trying alternative...");
+            // Try alternative Solflare deep link
+            const alternativeLink = `https://solflare.com/ul/browse/${encodeURIComponent(window.location.href)}`;
+            window.open(alternativeLink, '_blank');
+          }
+          
+        } catch (error) {
+          console.log("📱 Solflare official deep link failed:", error);
+        }
+      }
+      
+      // Method 4: Try Coinbase deep link with official format
+      if (!connectionSuccess && selectedWalletType.toLowerCase() === 'coinbase') {
+        try {
+          console.log("📱 Trying Coinbase official deep link format...");
+          
+          const walletMetadata = {
+            name: "Meta Betties NFT Verification",
+            url: "https://admin-q2j7.onrender.com",
+            description: "NFT verification portal for Meta Betties community",
+            icon: "https://admin-q2j7.onrender.com/favicon.ico",
+            cluster: "mainnet-beta",
+            deepLinkBase: "https://wallet.coinbase.com/wallet-selector"
+          };
+          
+          const coinbaseAppUrl = encodeURIComponent(walletMetadata.url);
+          const coinbaseRedirectLink = encodeURIComponent(window.location.href);
+          const coinbaseCluster = walletMetadata.cluster;
+          
+          const officialCoinbaseLink = new URL(walletMetadata.deepLinkBase);
+          officialCoinbaseLink.searchParams.append("redirect_uri", coinbaseRedirectLink);
+          officialCoinbaseLink.searchParams.append("app_url", coinbaseAppUrl);
+          officialCoinbaseLink.searchParams.append("cluster", coinbaseCluster);
+          
+          console.log("📱 Official Coinbase deep link for fallback:", officialCoinbaseLink.toString());
+          console.log("📱 App Name:", walletMetadata.name);
+          console.log("📱 App URL:", coinbaseAppUrl);
+          console.log("📱 Redirect Link:", coinbaseRedirectLink);
+          
+          // Open official deep link
+          const coinbaseWindow = window.open(officialCoinbaseLink.toString(), '_blank');
+          
+          if (coinbaseWindow && !coinbaseWindow.closed) {
+            console.log("📱 Coinbase official deep link opened successfully");
+            setStatus({ 
+              type: "info", 
+              message: "📱 Coinbase app opened! Please approve the connection..." 
+            });
+            
+            // Wait for user to complete connection
+            setTimeout(() => {
+              if (!connected) {
+                setStatus({ 
+                  type: "warning", 
+                  message: "⚠️ Coinbase connection pending. Please check your Coinbase app and approve the connection." 
+                });
+              }
+            }, 5000);
+            
+          } else {
+            console.log("📱 Coinbase official deep link failed, trying alternative...");
+            // Try alternative Coinbase deep link
+            const alternativeLink = `coinbase-wallet://wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`;
+            window.open(alternativeLink, '_blank');
+          }
+          
+        } catch (error) {
+          console.log("📱 Coinbase official deep link failed:", error);
+        }
+      }
+      
+      // Method 5: Try direct wallet connections as last resort
+      if (!connectionSuccess && selectedWalletType.toLowerCase() === 'phantom' && window.solana?.isPhantom) {
+        try {
+          console.log("📱 Phantom detected, attempting direct fallback connection...");
+          await window.solana.connect();
+          connectionSuccess = true;
+          console.log("📱 Phantom connected via direct fallback method");
+        } catch (error) {
+          console.log("📱 Direct Phantom fallback connection failed:", error);
+        }
+      }
+      
+      // Method 6: Try Solflare direct connection
       if (!connectionSuccess && selectedWalletType.toLowerCase() === 'solflare' && window.solflare?.isSolflare) {
         try {
           console.log("📱 Solflare detected, attempting direct fallback connection...");
@@ -933,7 +1709,7 @@ function WalletPanel({ onVerify }) {
         }
       }
       
-      // Method 4: Try Coinbase direct connection
+      // Method 7: Try Coinbase direct connection
       if (!connectionSuccess && selectedWalletType.toLowerCase() === 'coinbase' && window.coinbaseWallet) {
         try {
           console.log("📱 Coinbase detected, attempting direct fallback connection...");
@@ -1331,6 +2107,59 @@ function WalletPanel({ onVerify }) {
       {/* Status Display */}
       <StatusIndicator type={status.type} message={status.message} />
       
+      {/* Connected Wallet Display */}
+      {(window.phantomWalletInfo || window.solflareWalletInfo || window.coinbaseWalletInfo || window.universalWalletInfo) && (
+        <div className="mt-4 p-4 bg-green-500/20 border border-green-400/30 rounded-xl">
+          <div className="flex items-center justify-center space-x-3 mb-3">
+            <span className="text-green-400 text-2xl">🎉</span>
+            <span className="text-green-200 font-medium">Wallet Connected Successfully!</span>
+          </div>
+          
+          <div className="text-center space-y-2">
+            {/* Display wallet info based on what's available */}
+            {(() => {
+              const walletInfo = window.universalWalletInfo || window.phantomWalletInfo || window.solflareWalletInfo || window.coinbaseWalletInfo;
+              if (walletInfo) {
+                return (
+                  <>
+                    <div className="text-sm text-green-300">
+                      <strong>Wallet:</strong> {walletInfo.walletType || 'Unknown'}
+                    </div>
+                    <div className="text-sm text-green-300">
+                      <strong>Address:</strong> {shortAddress(walletInfo.publicKey)}
+                    </div>
+                    
+                    <div className="text-xs text-green-400">
+                      <strong>Connected:</strong> {new Date(walletInfo.connectedAt).toLocaleString()}
+                    </div>
+                    
+                    {walletInfo.signature && (
+                      <div className="text-xs text-green-400">
+                        <strong>Signature:</strong> {walletInfo.signature.substring(0, 20)}...
+                      </div>
+                    )}
+                  </>
+                );
+              }
+              return null;
+            })()}
+            
+            <div className="mt-3 p-2 bg-green-600/20 rounded-lg">
+              <p className="text-xs text-green-300 font-medium mb-1">✅ Connection Details:</p>
+              <ul className="text-xs text-green-400 text-left space-y-1">
+                <li>• Wallet: {(() => {
+                  const walletInfo = window.universalWalletInfo || window.phantomWalletInfo || window.solflareWalletInfo || window.coinbaseWalletInfo;
+                  return walletInfo?.walletType || 'Unknown';
+                })()}</li>
+                <li>• Network: Mainnet Beta</li>
+                <li>• Status: Active</li>
+                <li>• Ready for NFT verification</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Mobile Connection Status */}
       {mobileWalletConnecting && window.navigator.userAgent.includes('Mobile') && (
         <div className="mt-4 p-4 bg-blue-500/20 border border-blue-400/30 rounded-xl">
@@ -1478,7 +2307,7 @@ function App() {
 
   return (
     <ConnectionProvider endpoint={RPC_ENDPOINT}>
-      <WalletProvider wallets={wallets} autoConnect>
+      <WalletProvider wallets={wallets} autoConnect={false}>
         <WalletModalProvider>
           <div className="App">
             <header className="App-header">
