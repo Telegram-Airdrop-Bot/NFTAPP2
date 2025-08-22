@@ -16,7 +16,6 @@ import {
 import {
   PhantomWalletAdapter,
   SolflareWalletAdapter,
-  TorusWalletAdapter,
   CoinbaseWalletAdapter
 } from "@solana/wallet-adapter-wallets";
 
@@ -181,6 +180,110 @@ function WalletPanel({ onVerify }) {
 
   const walletAddress = publicKey ? publicKey.toBase58() : null;
 
+  // Generate encryption public key for Phantom deep links
+  const generatePhantomEncryptionKey = () => {
+    try {
+      // Create a more secure encryption key for Phantom
+      const array = new Uint8Array(32);
+      if (window.crypto && window.crypto.getRandomValues) {
+        // Use crypto.getRandomValues if available (more secure)
+        window.crypto.getRandomValues(array);
+      } else {
+        // Fallback to Math.random (less secure but functional)
+        for (let i = 0; i < array.length; i++) {
+          array[i] = Math.floor(Math.random() * 256);
+        }
+      }
+      
+      // Convert to base58-like string (Phantom expects base58)
+      const base58Chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+      let result = '';
+      for (let i = 0; i < array.length; i++) {
+        result += base58Chars[array[i] % base58Chars.length];
+      }
+      
+      return result;
+    } catch (error) {
+      console.warn("Error generating encryption key, using fallback:", error);
+      // Fallback to simple generation
+      const timestamp = Date.now().toString();
+      const random = Math.random().toString(36).substring(2);
+      return btoa(timestamp + random).substring(0, 32);
+    }
+  };
+
+  // Helper function to handle popup blocking with user interaction
+  const safeOpenPopup = (url, title = 'Redirect') => {
+    try {
+      // First try to open popup directly
+      const popup = window.open(url, '_blank');
+      
+      // Check if popup was blocked
+      if (!popup || popup.closed) {
+        console.log("⚠️ Popup blocked, creating user interaction button");
+        
+        // Create a floating button for user to click
+        const button = document.createElement('button');
+        button.textContent = `🚀 ${title}`;
+        button.style.cssText = `
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          z-index: 9999;
+          padding: 20px 40px;
+          background: linear-gradient(45deg, #10b981, #059669);
+          color: white;
+          border: none;
+          border-radius: 15px;
+          font-size: 18px;
+          font-weight: bold;
+          cursor: pointer;
+          box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+          transition: all 0.3s ease;
+          animation: pulse 2s infinite;
+        `;
+        
+        // Add CSS animation
+        const style = document.createElement('style');
+        style.textContent = `
+          @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.05); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+          }
+        `;
+        document.head.appendChild(style);
+        
+        button.onclick = () => {
+          // User interaction - this should work without popup blocking
+          window.open(url, '_blank');
+          document.body.removeChild(button);
+          document.head.removeChild(style);
+        };
+        
+        document.body.appendChild(button);
+        
+        // Auto-remove after 20 seconds
+        setTimeout(() => {
+          if (document.body.contains(button)) {
+            document.body.removeChild(button);
+            if (document.head.contains(style)) {
+              document.head.removeChild(style);
+            }
+          }
+        }, 20000);
+        
+        return false; // Popup was blocked
+      }
+      
+      return true; // Popup opened successfully
+    } catch (error) {
+      console.error("Error opening popup:", error);
+      return false;
+    }
+  };
+
   // Auto-fetch Telegram ID from URL parameters
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -234,7 +337,7 @@ function WalletPanel({ onVerify }) {
     }
   }, [connected, publicKey, mobileWalletConnecting]);
 
-  // Enhanced mobile wallet connection with simplified logic
+  // Enhanced mobile wallet connection with improved logic for all wallet types
   const handleMobileWalletConnection = useCallback(async (selectedWalletType) => {
     if (mobileWalletConnecting) return;
     
@@ -244,116 +347,225 @@ function WalletPanel({ onVerify }) {
     setStatus({ type: "info", message: `📱 Opening ${selectedWalletType} wallet...` });
     
     try {
-      // Simplified deep link approach for mobile wallet connection
-      let deepLink = '';
+      // Enhanced deep link approach for mobile wallet connection
+      let deepLinks = [];
       let fallbackUrl = '';
       
-      // Generate deep links for different wallet types with proper mobile support
+      // Generate multiple deep link formats for better compatibility
       switch (selectedWalletType.toLowerCase()) {
         case 'phantom':
-          // Phantom has the best mobile deep link support
-          deepLink = `https://phantom.app/ul/browse/${encodeURIComponent(window.location.href)}`;
+          // Phantom official deep link format according to docs.phantom.com
+          const phantomAppUrl = encodeURIComponent(window.location.origin);
+          const phantomRedirectLink = encodeURIComponent(window.location.href);
+          const phantomCluster = 'mainnet-beta'; // Default to mainnet
+          
+          // Generate encryption public key for Phantom
+          const dappEncryptionKey = generatePhantomEncryptionKey();
+          
+          deepLinks = [
+            // Official Phantom deep link format
+            `https://phantom.app/ul/v1/connect?app_url=${phantomAppUrl}&dapp_encryption_public_key=${dappEncryptionKey}&redirect_link=${phantomRedirectLink}&cluster=${phantomCluster}`,
+            // Alternative formats for better compatibility
+            `https://phantom.app/ul/browse/${encodeURIComponent(window.location.href)}`,
+            `https://phantom.app/ul/browse/${window.location.href}`,
+            `phantom://ul/browse/${encodeURIComponent(window.location.href)}`,
+            // Fallback URLs
+            `https://phantom.app/`,
+            `https://phantom.app/ul/`
+          ];
           fallbackUrl = 'https://phantom.app/';
           break;
         case 'solflare':
-          // Solflare mobile deep link with proper app scheme
-          deepLink = `solflare://ul/browse/${encodeURIComponent(window.location.href)}`;
+          // Solflare multiple deep link formats
+          deepLinks = [
+            `solflare://ul/browse/${encodeURIComponent(window.location.href)}`,
+            `https://solflare.com/ul/browse/${encodeURIComponent(window.location.href)}`,
+            `https://solflare.com/ul/browse/${window.location.href}`,
+            `https://solflare.com/`,
+            `https://solflare.com/ul/`
+          ];
           fallbackUrl = 'https://solflare.com/';
           break;
-        case 'torus':
-          // Torus mobile deep link with app scheme
-          deepLink = `torus://wallet/connect?appName=MetaBetties&appUrl=${encodeURIComponent(window.location.href)}`;
-          fallbackUrl = 'https://app.tor.us/';
-          break;
         case 'coinbase':
-          // Coinbase mobile deep link with app scheme
-          deepLink = `coinbase-wallet://wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`;
+          // Coinbase multiple deep link formats
+          deepLinks = [
+            `coinbase-wallet://wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`,
+            `https://wallet.coinbase.com/wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`,
+            `https://wallet.coinbase.com/`,
+            `https://wallet.coinbase.com/wallet-selector`
+          ];
           fallbackUrl = 'https://wallet.coinbase.com/';
           break;
         default:
-          // Default fallback for unknown wallet types
-          deepLink = window.location.href;
+          deepLinks = [window.location.href];
           fallbackUrl = window.location.href;
           break;
       }
       
-      console.log(`📱 Enhanced: Attempting to connect to ${selectedWalletType} with deep link:`, deepLink);
+      console.log(`📱 Enhanced: Attempting to connect to ${selectedWalletType} with ${deepLinks.length} deep link formats`);
       
-      // For mobile devices, use simplified connection strategy
+      // For mobile devices, try multiple connection methods
       if (window.navigator.userAgent.includes('Mobile')) {
-        console.log("📱 Mobile device detected, using simplified mobile connection strategy");
+        console.log("📱 Mobile device detected, using enhanced mobile connection strategy");
         
-        // Method 1: Try window.open with deep link first
-        try {
-          const newWindow = window.open(deepLink, '_blank');
-          
-          // Method 2: If window.open fails, try alternative approach
-          if (!newWindow || newWindow.closed) {
-            console.log("📱 Window.open failed, trying alternative approach");
-            
-            // Try alternative deep link formats for better mobile compatibility
-            let alternativeLink = '';
-            switch (selectedWalletType.toLowerCase()) {
-              case 'phantom':
-                alternativeLink = `https://phantom.app/ul/browse/${encodeURIComponent(window.location.href)}`;
-                break;
-              case 'solflare':
-                alternativeLink = `https://solflare.com/ul/browse/${encodeURIComponent(window.location.href)}`;
-                break;
-              case 'torus':
-                alternativeLink = `https://app.tor.us/wallet/connect?appName=MetaBetties&appUrl=${encodeURIComponent(window.location.href)}`;
-                break;
-              case 'coinbase':
-                alternativeLink = `https://wallet.coinbase.com/wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`;
-                break;
-              default:
-                alternativeLink = window.location.href;
-                break;
-            }
-            
-            if (alternativeLink) {
-              console.log("📱 Trying alternative link:", alternativeLink);
-              window.open(alternativeLink, '_blank');
-            }
+        let connectionAttempted = false;
+        
+        // Method 1: Try direct wallet detection first (if available)
+        if (selectedWalletType.toLowerCase() === 'phantom' && window.solana?.isPhantom) {
+          try {
+            console.log("📱 Phantom detected, attempting direct connection...");
+            await window.solana.connect();
+            connectionAttempted = true;
+            console.log("📱 Phantom connected via direct method");
+          } catch (error) {
+            console.log("📱 Direct Phantom connection failed:", error);
           }
-          
-        } catch (deepLinkError) {
-          console.warn("📱 Deep link error:", deepLinkError);
-          // Fallback to fallback URL
-          window.open(fallbackUrl, '_blank');
         }
         
-        // Set up a fallback timer with reasonable delay for mobile
+        // Phantom deep link response handling
+        if (selectedWalletType.toLowerCase() === 'phantom' && !connectionAttempted) {
+          try {
+            console.log("📱 Setting up Phantom deep link response handler...");
+            
+            // Listen for Phantom deep link response
+            const handlePhantomResponse = (event) => {
+              if (event.data && event.data.type === 'phantom_deeplink_response') {
+                console.log("📱 Phantom deep link response received:", event.data);
+                
+                // Handle the response data
+                if (event.data.data) {
+                  try {
+                    // Process the encrypted data (simplified for now)
+                    console.log("📱 Phantom connection successful, processing response...");
+                    setStatus({ 
+                      type: "success", 
+                      message: "🎉 Phantom wallet connected via deep link!" 
+                    });
+                    connectionAttempted = true;
+                  } catch (error) {
+                    console.error("📱 Error processing Phantom response:", error);
+                  }
+                }
+                
+                // Remove the event listener
+                window.removeEventListener('message', handlePhantomResponse);
+              }
+            };
+            
+            // Add event listener for Phantom response
+            window.addEventListener('message', handlePhantomResponse);
+            
+            // Cleanup after 30 seconds
+            setTimeout(() => {
+              window.removeEventListener('message', handlePhantomResponse);
+            }, 30000);
+            
+          } catch (error) {
+            console.log("📱 Phantom deep link handler setup failed:", error);
+          }
+        }
+        
+        if (selectedWalletType.toLowerCase() === 'solflare' && window.solflare?.isSolflare) {
+          try {
+            console.log("📱 Solflare detected, attempting direct connection...");
+            await window.solflare.connect();
+            connectionAttempted = true;
+            console.log("📱 Solflare connected via direct method");
+          } catch (error) {
+            console.log("📱 Direct Solflare connection failed:", error);
+          }
+        }
+        
+        if (selectedWalletType.toLowerCase() === 'coinbase' && window.coinbaseWallet) {
+          try {
+            console.log("📱 Coinbase detected, attempting direct connection...");
+            await window.coinbaseWallet.requestAccounts();
+            connectionAttempted = true;
+            console.log("📱 Coinbase connected via direct method");
+          } catch (error) {
+            console.log("📱 Direct Coinbase connection failed:", error);
+          }
+        }
+        
+        // Method 2: If direct connection failed, try deep links
+        if (!connectionAttempted) {
+          console.log("📱 Direct connection failed, trying deep links...");
+          
+          // Special handling for Phantom wallet
+          if (selectedWalletType.toLowerCase() === 'phantom') {
+            console.log("📱 Using official Phantom deep link format...");
+            setStatus({ 
+              type: "info", 
+              message: "📱 Opening Phantom app with official deep link..." 
+            });
+          }
+          
+          // Try each deep link format
+          for (let i = 0; i < deepLinks.length; i++) {
+            const deepLink = deepLinks[i];
+            console.log(`📱 Trying deep link ${i + 1}/${deepLinks.length}:`, deepLink);
+            
+            try {
+              // Try to open deep link
+              const newWindow = window.open(deepLink, '_blank');
+              
+              // Check if window opened successfully
+              if (newWindow && !newWindow.closed) {
+                console.log(`📱 Deep link ${i + 1} opened successfully`);
+                
+                // Special status for Phantom
+                if (selectedWalletType.toLowerCase() === 'phantom') {
+                  setStatus({ 
+                    type: "info", 
+                    message: "📱 Phantom app opened! Please approve the connection request..." 
+                  });
+                }
+                
+                break;
+              } else {
+                console.log(`📱 Deep link ${i + 1} failed, trying next...`);
+              }
+              
+              // Small delay between attempts
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+            } catch (deepLinkError) {
+              console.warn(`📱 Deep link ${i + 1} error:`, deepLinkError);
+              continue;
+            }
+          }
+        }
+        
+        // Method 3: Fallback to app store or website
         setTimeout(() => {
-          // If still not connected after 8 seconds, show fallback options
           if (!connected && mobileWalletConnecting) {
-            console.log("📱 Connection timeout, showing fallback options");
+            console.log("📱 Connection timeout, opening fallback options");
             setStatus({ 
               type: "warning", 
-              message: `⚠️ ${selectedWalletType} app not responding. Opening fallback options...` 
+              message: `⚠️ ${selectedWalletType} connection taking time. Opening fallback options...` 
             });
             
-            // Open fallback URL in new tab
+            // Open fallback URL
             window.open(fallbackUrl, '_blank');
             
             // Show manual connection instructions
             setTimeout(() => {
               setStatus({ 
                 type: "info", 
-                message: `📱 Please install ${selectedWalletType} app and return here to connect manually.` 
+                message: `📱 Please check your ${selectedWalletType} app and return here. If not installed, please install from the opened link.` 
               });
             }, 2000);
           }
-        }, 8000); // Reduced to 8 seconds for better UX
+        }, 10000); // Increased timeout for better UX
         
       } else {
         // For desktop, open in new tab
         console.log("🖥️ Desktop device, opening in new tab");
-        window.open(deepLink, '_blank');
+        window.open(deepLinks[0], '_blank');
       }
       
       // Set up connection monitoring with better error handling
-      const maxAttempts = 15; // Reduced timeout for better UX
+      const maxAttempts = 20; // Increased timeout for better UX
       const checkInterval = setInterval(() => {
         setConnectionAttempts(prev => {
           const newAttempts = prev + 1;
@@ -381,9 +593,9 @@ function WalletPanel({ onVerify }) {
           
           // Update status based on attempt count with better messages
           let statusMessage = '';
-          if (newAttempts <= 5) {
+          if (newAttempts <= 8) {
             statusMessage = `📱 Opening ${selectedWalletType} app... (${newAttempts}/${maxAttempts})`;
-          } else if (newAttempts <= 10) {
+          } else if (newAttempts <= 15) {
             statusMessage = `⏳ Waiting for ${selectedWalletType} connection... (${newAttempts}/${maxAttempts})`;
           } else {
             statusMessage = `⚠️ Still waiting... Check if ${selectedWalletType} app is open (${newAttempts}/${maxAttempts})`;
@@ -392,7 +604,7 @@ function WalletPanel({ onVerify }) {
           setStatus({ type: "info", message: statusMessage });
           return newAttempts;
         });
-      }, 1000); // Reduced interval for better responsiveness
+      }, 1000);
       
     } catch (error) {
       console.error(`Mobile wallet connection error for ${selectedWalletType}:`, error);
@@ -556,34 +768,37 @@ function WalletPanel({ onVerify }) {
     };
   }, []);
 
-  // Mobile wallet detection
+  // Mobile wallet detection with enhanced detection methods
   useEffect(() => {
     const detectMobileWallets = () => {
       const mobileWallets = [];
       
       try {
-        // Check for Phantom
+        // Enhanced Phantom detection
         if (window.solana?.isPhantom) {
           mobileWallets.push("Phantom");
           console.log("📱 Phantom wallet detected on mobile");
+        } else if (window.phantom?.solana?.isPhantom) {
+          mobileWallets.push("Phantom");
+          console.log("📱 Phantom wallet detected via alternative method");
         }
         
-        // Check for Solflare
+        // Enhanced Solflare detection
         if (window.solflare?.isSolflare) {
           mobileWallets.push("Solflare");
           console.log("📱 Solflare wallet detected on mobile");
+        } else if (window.solflare?.isSolflareWallet) {
+          mobileWallets.push("Solflare");
+          console.log("📱 Solflare wallet detected via alternative method");
         }
         
-        // Check for Torus
-        if (window.torus) {
-          mobileWallets.push("Torus");
-          console.log("📱 Torus wallet detected on mobile");
-        }
-        
-        // Check for Coinbase
+        // Enhanced Coinbase detection
         if (window.coinbaseWallet) {
           mobileWallets.push("Coinbase");
           console.log("📱 Coinbase wallet detected on mobile");
+        } else if (window.coinbaseWalletExtension) {
+          mobileWallets.push("Coinbase");
+          console.log("📱 Coinbase wallet detected via alternative method");
         }
         
         // Check for mobile-specific wallets
@@ -605,8 +820,13 @@ function WalletPanel({ onVerify }) {
     // Set up continuous monitoring for newly installed wallets
     const checkForNewWallets = () => {
       try {
-        // Check if any new wallets were installed
-        if (window.solana?.isPhantom || window.solflare?.isSolflare || window.torus || window.coinbaseWallet) {
+        // Check if any new wallets were installed with enhanced detection
+        if (window.solana?.isPhantom || 
+            window.phantom?.solana?.isPhantom ||
+            window.solflare?.isSolflare || 
+            window.solflare?.isSolflareWallet ||
+            window.coinbaseWallet || 
+            window.coinbaseWalletExtension) {
           console.log("🎉 New wallet detected! Attempting auto-connection...");
           
           // Trigger wallet detection again
@@ -646,44 +866,82 @@ function WalletPanel({ onVerify }) {
       // Method 1: Try direct wallet detection
       if (selectedWalletType.toLowerCase() === 'phantom' && window.solana?.isPhantom) {
         try {
+          console.log("📱 Phantom detected, attempting direct fallback connection...");
           await window.solana.connect();
           connectionSuccess = true;
-          console.log("📱 Phantom connected via direct method");
+          console.log("📱 Phantom connected via direct fallback method");
         } catch (error) {
-          console.log("📱 Direct Phantom connection failed:", error);
+          console.log("📱 Direct Phantom fallback connection failed:", error);
         }
       }
       
-      // Method 2: Try Solflare direct connection
+      // Method 2: Try Phantom deep link with official format
+      if (!connectionSuccess && selectedWalletType.toLowerCase() === 'phantom') {
+        try {
+          console.log("📱 Trying Phantom official deep link format...");
+          
+          const phantomAppUrl = encodeURIComponent(window.location.origin);
+          const phantomRedirectLink = encodeURIComponent(window.location.href);
+          const phantomCluster = 'mainnet-beta';
+          const dappEncryptionKey = generatePhantomEncryptionKey();
+          
+          const officialPhantomLink = `https://phantom.app/ul/v1/connect?app_url=${phantomAppUrl}&dapp_encryption_public_key=${dappEncryptionKey}&redirect_link=${phantomRedirectLink}&cluster=${phantomCluster}`;
+          
+          console.log("📱 Official Phantom deep link:", officialPhantomLink);
+          
+          // Open official deep link
+          const phantomWindow = window.open(officialPhantomLink, '_blank');
+          
+          if (phantomWindow && !phantomWindow.closed) {
+            console.log("📱 Phantom official deep link opened successfully");
+            setStatus({ 
+              type: "info", 
+              message: "📱 Phantom app opened! Please approve the connection..." 
+            });
+            
+            // Wait for user to complete connection
+            setTimeout(() => {
+              if (!connected) {
+                setStatus({ 
+                  type: "warning", 
+                  message: "⚠️ Phantom connection pending. Please check your Phantom app and approve the connection." 
+                });
+              }
+            }, 5000);
+            
+          } else {
+            console.log("📱 Phantom official deep link failed, trying alternative...");
+            // Try alternative Phantom deep link
+            const alternativeLink = `https://phantom.app/ul/browse/${encodeURIComponent(window.location.href)}`;
+            window.open(alternativeLink, '_blank');
+          }
+          
+        } catch (error) {
+          console.log("📱 Phantom official deep link failed:", error);
+        }
+      }
+      
+      // Method 3: Try Solflare direct connection
       if (!connectionSuccess && selectedWalletType.toLowerCase() === 'solflare' && window.solflare?.isSolflare) {
         try {
+          console.log("📱 Solflare detected, attempting direct fallback connection...");
           await window.solflare.connect();
           connectionSuccess = true;
-          console.log("📱 Solflare connected via direct method");
+          console.log("📱 Solflare connected via direct fallback method");
         } catch (error) {
-          console.log("📱 Direct Solflare connection failed:", error);
-        }
-      }
-      
-      // Method 3: Try Torus direct connection
-      if (!connectionSuccess && selectedWalletType.toLowerCase() === 'torus' && window.torus) {
-        try {
-          await window.torus.login();
-          connectionSuccess = true;
-          console.log("📱 Torus connected via direct method");
-        } catch (error) {
-          console.log("📱 Direct Torus connection failed:", error);
+          console.log("📱 Direct Solflare fallback connection failed:", error);
         }
       }
       
       // Method 4: Try Coinbase direct connection
       if (!connectionSuccess && selectedWalletType.toLowerCase() === 'coinbase' && window.coinbaseWallet) {
         try {
+          console.log("📱 Coinbase detected, attempting direct fallback connection...");
           await window.coinbaseWallet.requestAccounts();
           connectionSuccess = true;
-          console.log("📱 Coinbase connected via direct method");
+          console.log("📱 Coinbase connected via direct fallback method");
         } catch (error) {
-          console.log("📱 Direct Coinbase connection failed:", error);
+          console.log("📱 Direct Coinbase fallback connection failed:", error);
         }
       }
       
@@ -694,8 +952,8 @@ function WalletPanel({ onVerify }) {
           message: `🎉 ${selectedWalletType} connected via fallback method!` 
         });
       } else {
-        // If all direct methods fail, fall back to deep link method
-        console.log("📱 All direct methods failed, trying deep link fallback");
+        // If all direct methods fail, fall back to enhanced deep link method
+        console.log("📱 All direct fallback methods failed, trying enhanced deep link method");
         await handleMobileWalletConnection(selectedWalletType);
       }
       
@@ -707,7 +965,7 @@ function WalletPanel({ onVerify }) {
         message: `❌ Fallback connection failed for ${selectedWalletType}. Please try the standard connection method.` 
       });
     }
-  }, [mobileWalletConnecting, handleMobileWalletConnection]);
+  }, [mobileWalletConnecting, connected, generatePhantomEncryptionKey, handleMobileWalletConnection]);
 
   const doVerify = useCallback(
     async (collectionId = DEFAULT_COLLECTION, tg_id = null) => {
@@ -802,19 +1060,54 @@ function WalletPanel({ onVerify }) {
               const privateGroupUrl = CONFIG.TELEGRAM_GROUPS.PRIVATE_KEY;
               setStatus({ type: "success", message: `🎉 Redirecting to private group...` });
               
-              // Improved mobile redirect logic
+              console.log("🚀 Starting redirect to:", privateGroupUrl);
+              
+              // Improved redirect logic with popup blocking prevention
               try {
                 if (window.navigator.userAgent.includes('Mobile')) {
-                  // For mobile, try to open in same tab first
+                  // For mobile, try to open in same tab first (no popup blocking)
                   console.log("📱 Mobile device detected, redirecting to private group");
                   
-                  // Method 1: Try direct redirect
+                  // Method 1: Try direct redirect (no popup blocking)
                   window.location.href = privateGroupUrl;
                   
-                  // Method 2: Fallback to new tab if redirect doesn't work
+                  // Method 2: Fallback to new tab with user interaction
                   setTimeout(() => {
                     try {
-                      window.open(privateGroupUrl, '_blank');
+                      // Create a button for user to click (prevents popup blocking)
+                      const redirectButton = document.createElement('button');
+                      redirectButton.textContent = 'Click to join Private Group';
+                      redirectButton.style.cssText = `
+                        position: fixed;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        z-index: 9999;
+                        padding: 15px 30px;
+                        background: linear-gradient(45deg, #10b981, #059669);
+                        color: white;
+                        border: none;
+                        border-radius: 10px;
+                        font-size: 16px;
+                        font-weight: bold;
+                        cursor: pointer;
+                        box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+                      `;
+                      
+                      redirectButton.onclick = () => {
+                        window.open(privateGroupUrl, '_blank');
+                        document.body.removeChild(redirectButton);
+                      };
+                      
+                      document.body.appendChild(redirectButton);
+                      
+                      // Auto-remove after 10 seconds
+                      setTimeout(() => {
+                        if (document.body.contains(redirectButton)) {
+                          document.body.removeChild(redirectButton);
+                        }
+                      }, 10000);
+                      
                     } catch (fallbackError) {
                       console.warn("Fallback redirect failed:", fallbackError);
                       // Show manual link
@@ -823,16 +1116,26 @@ function WalletPanel({ onVerify }) {
                         message: `🎉 Access granted! Click here: ${privateGroupUrl}` 
                       });
                     }
-                  }, 1000);
+                  }, 2000);
                   
                 } else {
-                  // For desktop, open in new tab
-                  window.open(privateGroupUrl, '_blank');
+                  // For desktop, try multiple methods to prevent popup blocking
+                  console.log("🖥️ Desktop device, opening in new tab");
+                  
+                  // Use the safe popup helper function
+                  const popupSuccess = safeOpenPopup(privateGroupUrl, 'Join Private Group');
+                  
+                  if (!popupSuccess) {
+                    console.log("⚠️ Popup blocked, user interaction button created");
+                  }
                 }
               } catch (redirectError) {
                 console.warn("Redirect error:", redirectError);
-                // Fallback to new tab
-                window.open(privateGroupUrl, '_blank');
+                // Final fallback - show manual link
+                setStatus({ 
+                  type: "success", 
+                  message: `🎉 Access granted! Please manually visit: ${privateGroupUrl}` 
+                });
               }
               
               // Show success message
@@ -848,22 +1151,55 @@ function WalletPanel({ onVerify }) {
             setTimeout(() => {
               setStatus({ type: "warning", message: `⚠️ No NFT found. Redirecting to main group in 3 seconds...` });
               
-              // Redirect to main group after 3 seconds with improved mobile support
+              // Redirect to main group after 3 seconds with improved mobile support and popup blocking prevention
               setTimeout(() => {
                 const mainGroupUrl = CONFIG.TELEGRAM_GROUPS.MAIN_GROUP;
                 
                 try {
                   if (window.navigator.userAgent.includes('Mobile')) {
-                    // For mobile, try to open in same tab first
+                    // For mobile, try to open in same tab first (no popup blocking)
                     console.log("📱 Mobile device detected, redirecting to main group");
                     
-                    // Method 1: Try direct redirect
+                    // Method 1: Try direct redirect (no popup blocking)
                     window.location.href = mainGroupUrl;
                     
-                    // Method 2: Fallback to new tab if redirect doesn't work
+                    // Method 2: Fallback to new tab with user interaction
                     setTimeout(() => {
                       try {
-                        window.open(mainGroupUrl, '_blank');
+                        // Create a button for user to click (prevents popup blocking)
+                        const redirectButton = document.createElement('button');
+                        redirectButton.textContent = 'Click to join Main Group';
+                        redirectButton.style.cssText = `
+                          position: fixed;
+                          top: 50%;
+                          left: 50%;
+                          transform: translate(-50%, -50%);
+                          z-index: 9999;
+                          padding: 15px 30px;
+                          background: linear-gradient(45deg, #3b82f6, #2563eb);
+                          color: white;
+                          border: none;
+                          border-radius: 10px;
+                          font-size: 16px;
+                          font-weight: bold;
+                          cursor: pointer;
+                          box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+                        `;
+                        
+                        redirectButton.onclick = () => {
+                          window.open(mainGroupUrl, '_blank');
+                          document.body.removeChild(redirectButton);
+                        };
+                        
+                        document.body.appendChild(redirectButton);
+                        
+                        // Auto-remove after 10 seconds
+                        setTimeout(() => {
+                          if (document.body.contains(redirectButton)) {
+                            document.body.removeChild(redirectButton);
+                          }
+                        }, 10000);
+                        
                       } catch (fallbackError) {
                         console.warn("Fallback redirect failed:", fallbackError);
                         // Show manual link
@@ -872,11 +1208,18 @@ function WalletPanel({ onVerify }) {
                           message: `⚠️ Redirected to main group. Click here: ${mainGroupUrl}` 
                         });
                       }
-                    }, 1000);
+                    }, 2000);
                     
                   } else {
-                    // For desktop, open in new tab
-                    window.open(mainGroupUrl, '_blank');
+                    // For desktop, try multiple methods to prevent popup blocking
+                    console.log("🖥️ Desktop device, opening main group in new tab");
+                    
+                    // Use the safe popup helper function
+                    const popupSuccess = safeOpenPopup(mainGroupUrl, 'Join Main Group');
+                    
+                    if (!popupSuccess) {
+                      console.log("⚠️ Popup blocked, user interaction button created for main group");
+                    }
                   }
                 } catch (redirectError) {
                   console.warn("Redirect error:", redirectError);
@@ -1130,7 +1473,6 @@ function App() {
   const wallets = [
     new PhantomWalletAdapter(),
     new SolflareWalletAdapter(),
-    new TorusWalletAdapter(),
     new CoinbaseWalletAdapter(),
   ];
 
