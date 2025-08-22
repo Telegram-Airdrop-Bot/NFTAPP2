@@ -19,6 +19,9 @@ import {
   CoinbaseWalletAdapter
 } from "@solana/wallet-adapter-wallets";
 
+// Import Phantom React SDK
+import { PhantomProvider, AddressType, useConnect, useAccounts, useDisconnect } from "@phantom/react-sdk";
+
 // Import proper encryption libraries for Phantom deep links
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
@@ -165,6 +168,12 @@ function ReownAppKitConnectButton() {
 // ---------------------
 function WalletPanel({ onVerify }) {
   const { publicKey, connected } = useWallet(); // Remove unused: signTransaction, signAllTransactions, disconnect
+  
+  // Phantom React SDK hooks
+  const { connect, isLoading: phantomConnecting } = useConnect();
+  const accounts = useAccounts();
+  const { disconnect: phantomDisconnect } = useDisconnect();
+  
   const [status, setStatus] = useState({ type: "info", message: "🔗 Welcome! Connect your Solana wallet to start NFT verification" });
   const [verifying, setVerifying] = useState(false);
   const [nftCount, setNftCount] = useState(null);
@@ -175,6 +184,10 @@ function WalletPanel({ onVerify }) {
   const [walletType, setWalletType] = useState(""); // Add walletType state
 
   const walletAddress = publicKey ? publicKey.toBase58() : null;
+  
+  // Check if connected via Phantom SDK
+  const isPhantomConnected = accounts && accounts.length > 0;
+  const phantomAccount = isPhantomConnected ? accounts[0] : null;
 
   // Generate proper encryption key pair for Phantom deep links
   const generatePhantomEncryptionKey = () => {
@@ -349,6 +362,85 @@ function WalletPanel({ onVerify }) {
       });
       return false;
     }
+  };
+
+  // Manual Phantom wallet detection and debugging
+  const checkPhantomWallet = () => {
+    console.log("🔍 Manual Phantom wallet detection started...");
+    
+    const detectionResults = {
+      windowSolana: !!window.solana,
+      windowSolanaIsPhantom: !!window.solana?.isPhantom,
+      windowPhantom: !!window.phantom,
+      windowPhantomSolana: !!window.phantom?.solana,
+      windowPhantomSolanaIsPhantom: !!window.phantom?.solana?.isPhantom,
+      windowPhantomWallet: !!window.phantomWallet,
+      windowPhantomWalletExtension: !!window.phantomWalletExtension,
+      windowPhantomWalletAdapter: !!window.phantomWalletAdapter,
+      documentPhantom: !!document.phantom,
+      navigatorPhantom: !!navigator.phantom,
+      userAgent: window.navigator.userAgent,
+      isMobile: window.navigator.userAgent.includes('Mobile'),
+      isIOS: /iPad|iPhone|iPod/.test(window.navigator.userAgent),
+      isAndroid: /Android/.test(window.navigator.userAgent)
+    };
+    
+    console.log("📊 Phantom detection results:", detectionResults);
+    
+    // Check for any Phantom-related objects
+    let phantomDetected = false;
+    let detectionMethod = "";
+    
+    if (window.solana?.isPhantom) {
+      phantomDetected = true;
+      detectionMethod = "window.solana.isPhantom";
+    } else if (window.phantom?.solana?.isPhantom) {
+      phantomDetected = true;
+      detectionMethod = "window.phantom.solana.isPhantom";
+    } else if (window.phantom?.solana) {
+      phantomDetected = true;
+      detectionMethod = "window.phantom.solana";
+    } else if (window.solana) {
+      phantomDetected = true;
+      detectionMethod = "window.solana";
+    } else if (window.phantom) {
+      phantomDetected = true;
+      detectionMethod = "window.phantom";
+    } else if (window.phantomWallet) {
+      phantomDetected = true;
+      detectionMethod = "window.phantomWallet";
+    } else if (window.phantomWalletExtension) {
+      phantomDetected = true;
+      detectionMethod = "window.phantomWalletExtension";
+    } else if (window.phantomWalletAdapter) {
+      phantomDetected = true;
+      detectionMethod = "window.phantomWalletAdapter";
+    }
+    
+    if (phantomDetected) {
+      console.log("✅ Phantom wallet detected via:", detectionMethod);
+      setStatus({ 
+        type: "success", 
+        message: `✅ Phantom wallet detected via ${detectionMethod}` 
+      });
+    } else {
+      console.log("❌ Phantom wallet not detected");
+      setStatus({ 
+        type: "warning", 
+        message: "❌ Phantom wallet not detected. Please make sure Phantom app is installed and try again." 
+      });
+      
+      // Show detailed debugging info
+      console.log("🔍 Debugging information:");
+      console.log("- User Agent:", window.navigator.userAgent);
+      console.log("- Is Mobile:", window.navigator.userAgent.includes('Mobile'));
+      console.log("- Is iOS:", /iPad|iPhone|iPod/.test(window.navigator.userAgent));
+      console.log("- Is Android:", /Android/.test(window.navigator.userAgent));
+      console.log("- Window objects:", Object.keys(window).filter(key => key.toLowerCase().includes('phantom')));
+      console.log("- Solana objects:", Object.keys(window).filter(key => key.toLowerCase().includes('solana')));
+    }
+    
+    return { phantomDetected, detectionMethod, detectionResults };
   };
 
   // Helper function to handle popup blocking with user interaction
@@ -559,6 +651,19 @@ function WalletPanel({ onVerify }) {
         console.log("✅ Coinbase URL parameters cleared after successful redirect handling");
       }
     }
+  }, []);
+
+  // Auto-check for Phantom wallet when component mounts
+  useEffect(() => {
+    // Wait a bit for wallet injection
+    const checkPhantomAfterDelay = () => {
+      setTimeout(() => {
+        console.log("🔍 Auto-checking for Phantom wallet...");
+        checkPhantomWallet();
+      }, 2000); // Wait 2 seconds for wallet injection
+    };
+    
+    checkPhantomAfterDelay();
   }, []);
 
   // Save auto-connect preference when wallet connects
@@ -1379,6 +1484,59 @@ function WalletPanel({ onVerify }) {
         } else if (window.solana) {
           mobileWallets.push("Phantom");
           console.log("📱 Phantom wallet detected via window.solana");
+        } else if (window.phantom) {
+          mobileWallets.push("Phantom");
+          console.log("📱 Phantom wallet detected via window.phantom");
+        } else if (window.phantomWallet) {
+          mobileWallets.push("Phantom");
+          console.log("📱 Phantom wallet detected via window.phantomWallet");
+        } else if (window.phantomWalletExtension) {
+          mobileWallets.push("Phantom");
+          console.log("📱 Phantom wallet detected via window.phantomWalletExtension");
+        } else if (window.phantomWalletAdapter) {
+          mobileWallets.push("Phantom");
+          console.log("📱 Phantom wallet detected via window.phantomWalletAdapter");
+        }
+        
+        // Additional Phantom detection methods for mobile
+        try {
+          // Check if Phantom is injected in any form
+          if (typeof window !== 'undefined') {
+            // Method 1: Check for Phantom object
+            if (window.phantom) {
+              mobileWallets.push("Phantom");
+              console.log("📱 Phantom wallet detected via window.phantom object");
+            }
+            
+            // Method 2: Check for Solana object with Phantom properties
+            if (window.solana && typeof window.solana === 'object') {
+              const solanaKeys = Object.keys(window.solana);
+              if (solanaKeys.includes('isPhantom') || solanaKeys.includes('phantom')) {
+                mobileWallets.push("Phantom");
+                console.log("📱 Phantom wallet detected via window.solana properties:", solanaKeys);
+              }
+            }
+            
+            // Method 3: Check for Phantom in global scope
+            if (window.Phantom || window.PHANTOM) {
+              mobileWallets.push("Phantom");
+              console.log("📱 Phantom wallet detected via global Phantom object");
+            }
+            
+            // Method 4: Check for Phantom in document
+            if (document.phantom || document.Phantom) {
+              mobileWallets.push("Phantom");
+              console.log("📱 Phantom wallet detected via document.phantom");
+            }
+            
+            // Method 5: Check for Phantom in navigator
+            if (navigator.phantom || navigator.Phantom) {
+              mobileWallets.push("Phantom");
+              console.log("📱 Phantom wallet detected via navigator.phantom");
+            }
+          }
+        } catch (error) {
+          console.warn("⚠️ Error in additional Phantom detection:", error);
         }
         
         // Enhanced Solflare detection
@@ -2070,6 +2228,58 @@ function WalletPanel({ onVerify }) {
 
         <div className="flex flex-row items-center gap-3 md:gap-4">
           <WalletMultiButton className="wallet-connect-btn text-sm md:text-base px-4 md:px-8 py-3 md:py-4" />
+          
+          {/* Phantom SDK Connect Button */}
+          {!isPhantomConnected ? (
+            <button
+              onClick={async () => {
+                try {
+                  setStatus({ type: "info", message: "🔗 Connecting to Phantom wallet..." });
+                  const result = await connect();
+                  console.log("✅ Phantom connected via SDK:", result);
+                  setStatus({ type: "success", message: `🎉 Phantom wallet connected! Address: ${shortAddress(result.accounts[0].address)}` });
+                } catch (error) {
+                  console.error("❌ Phantom connection failed:", error);
+                  setStatus({ type: "error", message: `❌ Phantom connection failed: ${error.message}` });
+                }
+              }}
+              disabled={phantomConnecting}
+              className="btn btn-primary text-xs md:text-sm px-3 md:px-6 py-2 md:py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+            >
+              {phantomConnecting ? (
+                <div className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Connecting...</span>
+                </div>
+              ) : (
+                "🔗 Connect Phantom"
+              )}
+            </button>
+          ) : (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => navigator.clipboard?.writeText(phantomAccount.address)}
+                className="btn btn-secondary text-xs md:text-sm px-3 md:px-6 py-2 md:py-3"
+                title={phantomAccount.address}
+              >
+                {shortAddress(phantomAccount.address)}
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await phantomDisconnect();
+                    setStatus({ type: "info", message: "🔌 Phantom wallet disconnected" });
+                  } catch (error) {
+                    console.error("❌ Phantom disconnect failed:", error);
+                  }
+                }}
+                className="btn btn-danger text-xs md:text-sm px-2 md:px-4 py-2 md:py-3"
+              >
+                Disconnect
+              </button>
+            </div>
+          )}
+          
           {connected && (
             <button
               onClick={() => navigator.clipboard?.writeText(walletAddress)}
@@ -2079,6 +2289,15 @@ function WalletPanel({ onVerify }) {
               {shortAddress(walletAddress)}
             </button>
           )}
+          
+          {/* Manual Phantom Detection Button */}
+          <button
+            onClick={checkPhantomWallet}
+            className="btn btn-info text-xs md:text-sm px-3 md:px-6 py-2 md:py-3"
+            title="Check Phantom Wallet Detection"
+          >
+            🔍 Check Phantom
+          </button>
         </div>
         
         {/* Mobile Wallet Quick Connect - REMOVED */}
@@ -2108,7 +2327,7 @@ function WalletPanel({ onVerify }) {
       <StatusIndicator type={status.type} message={status.message} />
       
       {/* Connected Wallet Display */}
-      {(window.phantomWalletInfo || window.solflareWalletInfo || window.coinbaseWalletInfo || window.universalWalletInfo) && (
+      {(window.phantomWalletInfo || window.solflareWalletInfo || window.coinbaseWalletInfo || window.universalWalletInfo || isPhantomConnected) && (
         <div className="mt-4 p-4 bg-green-500/20 border border-green-400/30 rounded-xl">
           <div className="flex items-center justify-center space-x-3 mb-3">
             <span className="text-green-400 text-2xl">🎉</span>
@@ -2118,6 +2337,26 @@ function WalletPanel({ onVerify }) {
           <div className="text-center space-y-2">
             {/* Display wallet info based on what's available */}
             {(() => {
+              // Priority: Phantom SDK > Universal > Specific wallets
+              if (isPhantomConnected && phantomAccount) {
+                return (
+                  <>
+                    <div className="text-sm text-green-300">
+                      <strong>Wallet:</strong> Phantom (SDK)
+                    </div>
+                    <div className="text-sm text-green-300">
+                      <strong>Address:</strong> {shortAddress(phantomAccount.address)}
+                    </div>
+                    <div className="text-xs text-green-400">
+                      <strong>Type:</strong> {phantomAccount.type}
+                    </div>
+                    <div className="text-xs text-green-400">
+                      <strong>Network:</strong> {phantomAccount.network}
+                    </div>
+                  </>
+                );
+              }
+              
               const walletInfo = window.universalWalletInfo || window.phantomWalletInfo || window.solflareWalletInfo || window.coinbaseWalletInfo;
               if (walletInfo) {
                 return (
@@ -2147,13 +2386,16 @@ function WalletPanel({ onVerify }) {
             <div className="mt-3 p-2 bg-green-600/20 rounded-lg">
               <p className="text-xs text-green-300 font-medium mb-1">✅ Connection Details:</p>
               <ul className="text-xs text-green-400 text-left space-y-1">
-                <li>• Wallet: {(() => {
+                <li>• Wallet: {isPhantomConnected ? 'Phantom (SDK)' : (() => {
                   const walletInfo = window.universalWalletInfo || window.phantomWalletInfo || window.solflareWalletInfo || window.coinbaseWalletInfo;
                   return walletInfo?.walletType || 'Unknown';
                 })()}</li>
                 <li>• Network: Mainnet Beta</li>
                 <li>• Status: Active</li>
                 <li>• Ready for NFT verification</li>
+                {isPhantomConnected && (
+                  <li>• Integration: Official Phantom SDK</li>
+                )}
               </ul>
             </div>
           </div>
@@ -2306,78 +2548,88 @@ function App() {
   ];
 
   return (
-    <ConnectionProvider endpoint={RPC_ENDPOINT}>
-      <WalletProvider wallets={wallets} autoConnect={false}>
-        <WalletModalProvider>
-          <div className="App">
-            <header className="App-header">
-              <div className="container mx-auto px-4 py-8">
-                <WalletPanel />
-              </div>
-            </header>
-            
-            {/* Professional Footer */}
-            <footer className="mt-16 py-8 border-t border-white/10">
-    
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <PhantomProvider
+      config={{
+        providerType: "embedded",
+        embeddedWalletType: "user-wallet",
+        addressTypes: [AddressType.solana],
+        apiBaseUrl: "https://api.phantom.app/v1/wallets",
+        organizationId: "meta-betties-nft-verification"
+      }}
+    >
+      <ConnectionProvider endpoint={RPC_ENDPOINT}>
+        <WalletProvider wallets={wallets} autoConnect={false}>
+          <WalletModalProvider>
+            <div className="App">
+              <header className="App-header">
+                <div className="container mx-auto px-4 py-8">
+                  <WalletPanel />
+                </div>
+              </header>
+              
+              {/* Professional Footer */}
+              <footer className="mt-16 py-8 border-t border-white/10">
+        
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    
                   
-                
-                {/* Bottom Bar */}
-                <div className="mt-8 pt-6 border-t border-white/10 text-center">
-                  <p className="text-white/50 text-sm">
-                    © 2025 Meta Betties. All rights reserved. | 
-      
-                  </p>
-                    
-                    {/* Developer Credit - Invisible and Locked */}
-                    <div 
-                      className="developer-credit-locked opacity-0 pointer-events-none select-none"
-                      data-protection="developer-credit-backup"
-                      style={{
-                        position: 'absolute',
-                        left: '-9999px',
-                        visibility: 'hidden',
-                        display: 'none'
-                      }}
-                    >
-                      <p className="text-transparent text-xs">
-                        Developed by{' '}
-                        <a 
-                          href="https://i-am-mushfiqur.netlify.app/" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-transparent hover:text-transparent"
-                        >
-                          Mushfiqur Rahman
-                        </a>
-                      </p>
-                    </div>
-                    
-                    {/* Visible Developer Credit - Subtle but Protected */}
-                    <div 
-                      className="developer-credit-visible mt-2 opacity-30 hover:opacity-60 transition-opacity duration-300"
-                      data-protection="developer-credit-visible"
-                    >
-                      <p className="text-white/30 text-xs">
-                        Crafted with ❤️ by{' '}
-                        <a 
-                          href="https://i-am-mushfiqur.netlify.app/" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-white/40 hover:text-white/60 transition-colors underline decoration-dotted"
-                          title="Developer Portfolio"
-                        >
-                          Mushfiqur Rahman
-                        </a>
-                      </p>
+                  {/* Bottom Bar */}
+                  <div className="mt-8 pt-6 border-t border-white/10 text-center">
+                    <p className="text-white/50 text-sm">
+                      © 2025 Meta Betties. All rights reserved. | 
+            
+                    </p>
+                      
+                      {/* Developer Credit - Invisible and Locked */}
+                      <div 
+                        className="developer-credit-locked opacity-0 pointer-events-none select-none"
+                        data-protection="developer-credit-backup"
+                        style={{
+                          position: 'absolute',
+                          left: '-9999px',
+                          visibility: 'hidden',
+                          display: 'none'
+                        }}
+                      >
+                        <p className="text-transparent text-xs">
+                          Developed by{' '}
+                          <a 
+                            href="https://i-am-mushfiqur.netlify.app/" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-transparent hover:text-transparent"
+                          >
+                            Mushfiqur Rahman
+                          </a>
+                        </p>
+                  </div>
+                      
+                      {/* Visible Developer Credit - Subtle but Protected */}
+                      <div 
+                        className="developer-credit-locked mt-2 opacity-30 hover:opacity-60 transition-opacity duration-300"
+                        data-protection="developer-credit-visible"
+                      >
+                        <p className="text-white/30 text-xs">
+                          Crafted with ❤️ by{' '}
+                          <a 
+                            href="https://i-am-mushfiqur.netlify.app/" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-white/40 hover:text-white/60 transition-colors underline decoration-dotted"
+                            title="Developer Portfolio"
+                          >
+                            Mushfiqur Rahman
+                          </a>
+                        </p>
+                  </div>
                     </div>
                   </div>
-              </div>
-            </footer>
-          </div>
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+                </footer>
+            </div>
+          </WalletModalProvider>
+        </WalletProvider>
+      </ConnectionProvider>
+    </PhantomProvider>
   );
 }
 
