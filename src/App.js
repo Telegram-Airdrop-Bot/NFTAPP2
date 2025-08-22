@@ -19,9 +19,6 @@ import {
   CoinbaseWalletAdapter
 } from "@solana/wallet-adapter-wallets";
 
-// Import Phantom React SDK
-import { PhantomProvider, AddressType, useConnect, useAccounts, useDisconnect } from "@phantom/react-sdk";
-
 // Import proper encryption libraries for Phantom deep links
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
@@ -168,12 +165,6 @@ function ReownAppKitConnectButton() {
 // ---------------------
 function WalletPanel({ onVerify }) {
   const { publicKey, connected } = useWallet(); // Remove unused: signTransaction, signAllTransactions, disconnect
-  
-  // Phantom React SDK hooks
-  const { connect, isLoading: phantomConnecting } = useConnect();
-  const accounts = useAccounts();
-  const { disconnect: phantomDisconnect } = useDisconnect();
-  
   const [status, setStatus] = useState({ type: "info", message: "🔗 Welcome! Connect your Solana wallet to start NFT verification" });
   const [verifying, setVerifying] = useState(false);
   const [nftCount, setNftCount] = useState(null);
@@ -184,10 +175,6 @@ function WalletPanel({ onVerify }) {
   const [walletType, setWalletType] = useState(""); // Add walletType state
 
   const walletAddress = publicKey ? publicKey.toBase58() : null;
-  
-  // Check if connected via Phantom SDK
-  const isPhantomConnected = accounts && accounts.length > 0;
-  const phantomAccount = isPhantomConnected ? accounts[0] : null;
 
   // Generate proper encryption key pair for Phantom deep links
   const generatePhantomEncryptionKey = () => {
@@ -345,15 +332,15 @@ function WalletPanel({ onVerify }) {
         }, 2000);
         
         console.log(`✅ ${walletType} wallet info handled successfully`);
-        return true;
+          return true;
       } else {
         console.warn(`⚠️ No public key in ${walletType} wallet info`);
         setStatus({ 
           type: "warning", 
           message: `⚠️ ${walletType} wallet connection incomplete. Please try again.` 
         });
-        return false;
-      }
+          return false;
+        }
     } catch (error) {
       console.error(`❌ Error handling ${walletType} wallet info:`, error);
       setStatus({ 
@@ -362,85 +349,6 @@ function WalletPanel({ onVerify }) {
       });
       return false;
     }
-  };
-
-  // Manual Phantom wallet detection and debugging
-  const checkPhantomWallet = () => {
-    console.log("🔍 Manual Phantom wallet detection started...");
-    
-    const detectionResults = {
-      windowSolana: !!window.solana,
-      windowSolanaIsPhantom: !!window.solana?.isPhantom,
-      windowPhantom: !!window.phantom,
-      windowPhantomSolana: !!window.phantom?.solana,
-      windowPhantomSolanaIsPhantom: !!window.phantom?.solana?.isPhantom,
-      windowPhantomWallet: !!window.phantomWallet,
-      windowPhantomWalletExtension: !!window.phantomWalletExtension,
-      windowPhantomWalletAdapter: !!window.phantomWalletAdapter,
-      documentPhantom: !!document.phantom,
-      navigatorPhantom: !!navigator.phantom,
-      userAgent: window.navigator.userAgent,
-      isMobile: window.navigator.userAgent.includes('Mobile'),
-      isIOS: /iPad|iPhone|iPod/.test(window.navigator.userAgent),
-      isAndroid: /Android/.test(window.navigator.userAgent)
-    };
-    
-    console.log("📊 Phantom detection results:", detectionResults);
-    
-    // Check for any Phantom-related objects
-    let phantomDetected = false;
-    let detectionMethod = "";
-    
-    if (window.solana?.isPhantom) {
-      phantomDetected = true;
-      detectionMethod = "window.solana.isPhantom";
-    } else if (window.phantom?.solana?.isPhantom) {
-      phantomDetected = true;
-      detectionMethod = "window.phantom.solana.isPhantom";
-    } else if (window.phantom?.solana) {
-      phantomDetected = true;
-      detectionMethod = "window.phantom.solana";
-    } else if (window.solana) {
-      phantomDetected = true;
-      detectionMethod = "window.solana";
-    } else if (window.phantom) {
-      phantomDetected = true;
-      detectionMethod = "window.phantom";
-    } else if (window.phantomWallet) {
-      phantomDetected = true;
-      detectionMethod = "window.phantomWallet";
-    } else if (window.phantomWalletExtension) {
-      phantomDetected = true;
-      detectionMethod = "window.phantomWalletExtension";
-    } else if (window.phantomWalletAdapter) {
-      phantomDetected = true;
-      detectionMethod = "window.phantomWalletAdapter";
-    }
-    
-    if (phantomDetected) {
-      console.log("✅ Phantom wallet detected via:", detectionMethod);
-      setStatus({ 
-        type: "success", 
-        message: `✅ Phantom wallet detected via ${detectionMethod}` 
-      });
-    } else {
-      console.log("❌ Phantom wallet not detected");
-      setStatus({ 
-        type: "warning", 
-        message: "❌ Phantom wallet not detected. Please make sure Phantom app is installed and try again." 
-      });
-      
-      // Show detailed debugging info
-      console.log("🔍 Debugging information:");
-      console.log("- User Agent:", window.navigator.userAgent);
-      console.log("- Is Mobile:", window.navigator.userAgent.includes('Mobile'));
-      console.log("- Is iOS:", /iPad|iPhone|iPod/.test(window.navigator.userAgent));
-      console.log("- Is Android:", /Android/.test(window.navigator.userAgent));
-      console.log("- Window objects:", Object.keys(window).filter(key => key.toLowerCase().includes('phantom')));
-      console.log("- Solana objects:", Object.keys(window).filter(key => key.toLowerCase().includes('solana')));
-    }
-    
-    return { phantomDetected, detectionMethod, detectionResults };
   };
 
   // Helper function to handle popup blocking with user interaction
@@ -653,19 +561,6 @@ function WalletPanel({ onVerify }) {
     }
   }, []);
 
-  // Auto-check for Phantom wallet when component mounts
-  useEffect(() => {
-    // Wait a bit for wallet injection
-    const checkPhantomAfterDelay = () => {
-      setTimeout(() => {
-        console.log("🔍 Auto-checking for Phantom wallet...");
-        checkPhantomWallet();
-      }, 2000); // Wait 2 seconds for wallet injection
-    };
-    
-    checkPhantomAfterDelay();
-  }, []);
-
   // Save auto-connect preference when wallet connects
   useEffect(() => {
     if (connected && publicKey) {
@@ -728,9 +623,9 @@ function WalletPanel({ onVerify }) {
         type: "info", 
         message: "🔌 Wallet connection cancelled by user." 
       });
-      return;
-    }
-    
+        return;
+      }
+      
     // User confirmed, proceed with connection
     setStatus({ type: "info", message: `📱 Opening ${selectedWalletType} wallet...` });
     
@@ -787,7 +682,7 @@ function WalletPanel({ onVerify }) {
             `https://phantom.app/ul/`
           ];
           fallbackUrl = 'https://phantom.app/';
-          break;
+        break;
           
         case 'solflare':
           // Solflare professional deep link format
@@ -828,7 +723,7 @@ function WalletPanel({ onVerify }) {
             `https://solflare.com/ul/`
           ];
           fallbackUrl = 'https://solflare.com/';
-          break;
+        break;
           
         case 'coinbase':
           // Coinbase professional deep link format
@@ -868,7 +763,7 @@ function WalletPanel({ onVerify }) {
             `https://wallet.coinbase.com/wallet-selector`
           ];
           fallbackUrl = 'https://wallet.coinbase.com/';
-          break;
+        break;
           
         default:
           walletMetadata = {
@@ -880,9 +775,9 @@ function WalletPanel({ onVerify }) {
           };
           deepLinks = [window.location.href];
           fallbackUrl = window.location.href;
-          break;
-      }
-      
+        break;
+    }
+    
       console.log(`📱 Enhanced: Attempting to connect to ${selectedWalletType} with ${deepLinks.length} deep link formats`);
       
       // For mobile devices, try multiple connection methods
@@ -922,7 +817,7 @@ function WalletPanel({ onVerify }) {
                   await window.phantom.solana.connect();
                   connected = true;
                   console.log("📱 Phantom connected via window.phantom.solana.connect()");
-                } catch (error) {
+    } catch (error) {
                   console.log("📱 window.phantom.solana.connect() failed:", error);
                 }
               }
@@ -1234,7 +1129,7 @@ function WalletPanel({ onVerify }) {
                   message: `📱 Please open ${selectedWalletType} app manually and approve the connection, then return here.` 
                 });
               }, 3000);
-            } else {
+      } else {
               // Wallet not detected, suggest installation
               setStatus({ 
                 type: "warning", 
@@ -1484,59 +1379,6 @@ function WalletPanel({ onVerify }) {
         } else if (window.solana) {
           mobileWallets.push("Phantom");
           console.log("📱 Phantom wallet detected via window.solana");
-        } else if (window.phantom) {
-          mobileWallets.push("Phantom");
-          console.log("📱 Phantom wallet detected via window.phantom");
-        } else if (window.phantomWallet) {
-          mobileWallets.push("Phantom");
-          console.log("📱 Phantom wallet detected via window.phantomWallet");
-        } else if (window.phantomWalletExtension) {
-          mobileWallets.push("Phantom");
-          console.log("📱 Phantom wallet detected via window.phantomWalletExtension");
-        } else if (window.phantomWalletAdapter) {
-          mobileWallets.push("Phantom");
-          console.log("📱 Phantom wallet detected via window.phantomWalletAdapter");
-        }
-        
-        // Additional Phantom detection methods for mobile
-        try {
-          // Check if Phantom is injected in any form
-          if (typeof window !== 'undefined') {
-            // Method 1: Check for Phantom object
-            if (window.phantom) {
-              mobileWallets.push("Phantom");
-              console.log("📱 Phantom wallet detected via window.phantom object");
-            }
-            
-            // Method 2: Check for Solana object with Phantom properties
-            if (window.solana && typeof window.solana === 'object') {
-              const solanaKeys = Object.keys(window.solana);
-              if (solanaKeys.includes('isPhantom') || solanaKeys.includes('phantom')) {
-                mobileWallets.push("Phantom");
-                console.log("📱 Phantom wallet detected via window.solana properties:", solanaKeys);
-              }
-            }
-            
-            // Method 3: Check for Phantom in global scope
-            if (window.Phantom || window.PHANTOM) {
-              mobileWallets.push("Phantom");
-              console.log("📱 Phantom wallet detected via global Phantom object");
-            }
-            
-            // Method 4: Check for Phantom in document
-            if (document.phantom || document.Phantom) {
-              mobileWallets.push("Phantom");
-              console.log("📱 Phantom wallet detected via document.phantom");
-            }
-            
-            // Method 5: Check for Phantom in navigator
-            if (navigator.phantom || navigator.Phantom) {
-              mobileWallets.push("Phantom");
-              console.log("📱 Phantom wallet detected via navigator.phantom");
-            }
-          }
-        } catch (error) {
-          console.warn("⚠️ Error in additional Phantom detection:", error);
         }
         
         // Enhanced Solflare detection
@@ -1639,9 +1481,9 @@ function WalletPanel({ onVerify }) {
         type: "info", 
         message: "🔌 Fallback connection cancelled by user." 
       });
-      return;
-    }
-    
+        return;
+      }
+
     // User confirmed, proceed with fallback connection
     setStatus({ type: "info", message: `📱 Trying fallback connection to ${selectedWalletType}...` });
     
@@ -1771,7 +1613,7 @@ function WalletPanel({ onVerify }) {
               }
             }, 5000);
             
-          } else {
+        } else {
             console.log("📱 Solflare official deep link failed, trying alternative...");
             // Try alternative Solflare deep link
             const alternativeLink = `https://solflare.com/ul/browse/${encodeURIComponent(window.location.href)}`;
@@ -1831,7 +1673,7 @@ function WalletPanel({ onVerify }) {
               }
             }, 5000);
             
-          } else {
+      } else {
             console.log("📱 Coinbase official deep link failed, trying alternative...");
             // Try alternative Coinbase deep link
             const alternativeLink = `coinbase-wallet://wallet-selector?redirect_uri=${encodeURIComponent(window.location.href)}`;
@@ -1905,17 +1747,17 @@ function WalletPanel({ onVerify }) {
     async (collectionId = DEFAULT_COLLECTION, tg_id = null) => {
       if (!walletAddress) {
         setStatus({ type: "warning", message: "🚫 Please connect your wallet first." });
-        return;
-      }
-      
+      return;
+    }
+
       // Use tg_id parameter or state value, fallback to user's default ID
       const telegramId = tg_id || tgId || "7761809923";
       
       if (!telegramId) {
         setStatus({ type: "warning", message: "🚫 Please enter your Telegram ID." });
-        return;
-      }
-      
+      return;
+    }
+
       setVerifying(true);
       setStatus({ type: "info", message: "⏳ Sending verification request..." });
 
@@ -1969,7 +1811,7 @@ function WalletPanel({ onVerify }) {
             if (res.ok) {
               data = await res.json();
               console.log("✅ CORS proxy call successful");
-            } else {
+      } else {
               throw new Error(`HTTP ${res.status}: ${res.statusText}`);
             }
           } catch (proxyError) {
@@ -1990,7 +1832,7 @@ function WalletPanel({ onVerify }) {
             setStatus({ type: "success", message: `✅ Verified — ${data.nft_count || 1} NFT(s) found. Access granted.` });
             
             // Automatically redirect to private group after successful verification
-            setTimeout(() => {
+        setTimeout(() => {
               const privateGroupUrl = CONFIG.TELEGRAM_GROUPS.PRIVATE_KEY;
               setStatus({ type: "success", message: `🎉 Redirecting to private group...` });
               
@@ -2078,7 +1920,7 @@ function WalletPanel({ onVerify }) {
               }, 3000);
             }, CONFIG.REDIRECT.SUCCESS_DELAY);
             
-          } else {
+    } else {
             setStatus({ type: "error", message: "❌ No matching NFT found for this wallet." });
             
             // Automatically redirect to main group after failed verification
@@ -2224,84 +2066,23 @@ function WalletPanel({ onVerify }) {
         <div className="flex-1">
           <h2 className="heading-2 mb-3 text-xl md:text-2xl lg:text-3xl">Meta Betties — NFT Verification</h2>
           {/* Description text removed */}
-        </div>
-
+                    </div>
+                    
         <div className="flex flex-row items-center gap-3 md:gap-4">
           <WalletMultiButton className="wallet-connect-btn text-sm md:text-base px-4 md:px-8 py-3 md:py-4" />
-          
-          {/* Phantom SDK Connect Button */}
-          {!isPhantomConnected ? (
-            <button
-              onClick={async () => {
-                try {
-                  setStatus({ type: "info", message: "🔗 Connecting to Phantom wallet..." });
-                  const result = await connect();
-                  console.log("✅ Phantom connected via SDK:", result);
-                  setStatus({ type: "success", message: `🎉 Phantom wallet connected! Address: ${shortAddress(result.accounts[0].address)}` });
-                } catch (error) {
-                  console.error("❌ Phantom connection failed:", error);
-                  setStatus({ type: "error", message: `❌ Phantom connection failed: ${error.message}` });
-                }
-              }}
-              disabled={phantomConnecting}
-              className="btn btn-primary text-xs md:text-sm px-3 md:px-6 py-2 md:py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-            >
-              {phantomConnecting ? (
-                <div className="flex items-center space-x-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  <span>Connecting...</span>
-                </div>
-              ) : (
-                "🔗 Connect Phantom"
-              )}
-            </button>
-          ) : (
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => navigator.clipboard?.writeText(phantomAccount.address)}
-                className="btn btn-secondary text-xs md:text-sm px-3 md:px-6 py-2 md:py-3"
-                title={phantomAccount.address}
-              >
-                {shortAddress(phantomAccount.address)}
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    await phantomDisconnect();
-                    setStatus({ type: "info", message: "🔌 Phantom wallet disconnected" });
-                  } catch (error) {
-                    console.error("❌ Phantom disconnect failed:", error);
-                  }
-                }}
-                className="btn btn-danger text-xs md:text-sm px-2 md:px-4 py-2 md:py-3"
-              >
-                Disconnect
-              </button>
-            </div>
-          )}
-          
           {connected && (
-            <button
+                      <button
               onClick={() => navigator.clipboard?.writeText(walletAddress)}
               className="btn btn-secondary text-xs md:text-sm px-3 md:px-6 py-2 md:py-3"
               title={walletAddress}
             >
               {shortAddress(walletAddress)}
-            </button>
+                      </button>
           )}
-          
-          {/* Manual Phantom Detection Button */}
-          <button
-            onClick={checkPhantomWallet}
-            className="btn btn-info text-xs md:text-sm px-3 md:px-6 py-2 md:py-3"
-            title="Check Phantom Wallet Detection"
-          >
-            🔍 Check Phantom
-          </button>
-        </div>
-        
+                    </div>
+                    
         {/* Mobile Wallet Quick Connect - REMOVED */}
-      </div>
+                          </div>
 
       {/* Telegram ID Input - Hidden but functional */}
       <div className="hidden">
@@ -2317,65 +2098,45 @@ function WalletPanel({ onVerify }) {
             placeholder="Telegram ID (auto-fetched from URL or enter manually)"
             className="input flex-1 text-sm md:text-base px-3 md:px-4 py-2 md:py-3"
           />
-        </div>
+                          </div>
         <p className="text-caption mt-2 text-xs md:text-sm">
           ID automatically fetched from URL parameters (tg_id, telegram_id, or id) or enter manually
         </p>
-      </div>
+                          </div>
 
       {/* Status Display */}
       <StatusIndicator type={status.type} message={status.message} />
       
       {/* Connected Wallet Display */}
-      {(window.phantomWalletInfo || window.solflareWalletInfo || window.coinbaseWalletInfo || window.universalWalletInfo || isPhantomConnected) && (
+      {(window.phantomWalletInfo || window.solflareWalletInfo || window.coinbaseWalletInfo || window.universalWalletInfo) && (
         <div className="mt-4 p-4 bg-green-500/20 border border-green-400/30 rounded-xl">
           <div className="flex items-center justify-center space-x-3 mb-3">
             <span className="text-green-400 text-2xl">🎉</span>
             <span className="text-green-200 font-medium">Wallet Connected Successfully!</span>
-          </div>
+                          </div>
           
           <div className="text-center space-y-2">
             {/* Display wallet info based on what's available */}
             {(() => {
-              // Priority: Phantom SDK > Universal > Specific wallets
-              if (isPhantomConnected && phantomAccount) {
-                return (
-                  <>
-                    <div className="text-sm text-green-300">
-                      <strong>Wallet:</strong> Phantom (SDK)
-                    </div>
-                    <div className="text-sm text-green-300">
-                      <strong>Address:</strong> {shortAddress(phantomAccount.address)}
-                    </div>
-                    <div className="text-xs text-green-400">
-                      <strong>Type:</strong> {phantomAccount.type}
-                    </div>
-                    <div className="text-xs text-green-400">
-                      <strong>Network:</strong> {phantomAccount.network}
-                    </div>
-                  </>
-                );
-              }
-              
               const walletInfo = window.universalWalletInfo || window.phantomWalletInfo || window.solflareWalletInfo || window.coinbaseWalletInfo;
               if (walletInfo) {
                 return (
                   <>
                     <div className="text-sm text-green-300">
                       <strong>Wallet:</strong> {walletInfo.walletType || 'Unknown'}
-                    </div>
+                          </div>
                     <div className="text-sm text-green-300">
                       <strong>Address:</strong> {shortAddress(walletInfo.publicKey)}
-                    </div>
+                          </div>
                     
                     <div className="text-xs text-green-400">
                       <strong>Connected:</strong> {new Date(walletInfo.connectedAt).toLocaleString()}
-                    </div>
+                          </div>
                     
                     {walletInfo.signature && (
                       <div className="text-xs text-green-400">
                         <strong>Signature:</strong> {walletInfo.signature.substring(0, 20)}...
-                      </div>
+                          </div>
                     )}
                   </>
                 );
@@ -2386,29 +2147,26 @@ function WalletPanel({ onVerify }) {
             <div className="mt-3 p-2 bg-green-600/20 rounded-lg">
               <p className="text-xs text-green-300 font-medium mb-1">✅ Connection Details:</p>
               <ul className="text-xs text-green-400 text-left space-y-1">
-                <li>• Wallet: {isPhantomConnected ? 'Phantom (SDK)' : (() => {
+                <li>• Wallet: {(() => {
                   const walletInfo = window.universalWalletInfo || window.phantomWalletInfo || window.solflareWalletInfo || window.coinbaseWalletInfo;
                   return walletInfo?.walletType || 'Unknown';
                 })()}</li>
                 <li>• Network: Mainnet Beta</li>
                 <li>• Status: Active</li>
                 <li>• Ready for NFT verification</li>
-                {isPhantomConnected && (
-                  <li>• Integration: Official Phantom SDK</li>
-                )}
               </ul>
-            </div>
-          </div>
-        </div>
-      )}
-      
+                      </div>
+                    </div>
+                  </div>
+                )}
+
       {/* Mobile Connection Status */}
       {mobileWalletConnecting && window.navigator.userAgent.includes('Mobile') && (
         <div className="mt-4 p-4 bg-blue-500/20 border border-blue-400/30 rounded-xl">
           <div className="flex items-center justify-center space-x-3 mb-3">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-300"></div>
             <span className="text-blue-200 font-medium">Connecting to Mobile Wallet...</span>
-          </div>
+                    </div>
           
           <div className="text-center space-y-2">
             <div className="text-sm text-blue-300">
@@ -2417,7 +2175,7 @@ function WalletPanel({ onVerify }) {
               {connectionAttempts > 5 && connectionAttempts <= 10 && `⏳ Waiting for connection... (${connectionAttempts}/15)`}
               {connectionAttempts > 10 && connectionAttempts < 15 && `⚠️ Still waiting... Check if app is open (${connectionAttempts}/15)`}
               {connectionAttempts >= 15 && "⚠️ Connection timeout. Please try again."}
-            </div>
+                          </div>
             
             {connectionAttempts > 0 && connectionAttempts < 15 && (
               <div className="w-full bg-blue-600/30 rounded-full h-2">
@@ -2425,14 +2183,14 @@ function WalletPanel({ onVerify }) {
                   className="bg-blue-400 h-2 rounded-full transition-all duration-500"
                   style={{ width: `${(connectionAttempts / 15) * 100}%` }}
                 ></div>
-              </div>
+                          </div>
             )}
             
             <div className="text-xs text-blue-400">
               {connectionAttempts <= 5 && "💡 Opening wallet app..."}
               {connectionAttempts > 5 && connectionAttempts <= 10 && "💡 Waiting for connection permission..."}
               {connectionAttempts > 10 && "💡 Make sure to grant connection permission in your wallet app"}
-            </div>
+                          </div>
             
             {/* Connection Tips */}
             <div className="mt-3 p-2 bg-blue-600/20 rounded-lg">
@@ -2451,7 +2209,7 @@ function WalletPanel({ onVerify }) {
                 <li>• Restart device if connection issues persist</li>
                 <li>• Use different browser if Chrome/Safari fails</li>
               </ul>
-            </div>
+                          </div>
             
             {/* Success indicator when connected */}
             {connected && (
@@ -2459,17 +2217,17 @@ function WalletPanel({ onVerify }) {
                 <div className="flex items-center justify-center space-x-2">
                   <span className="text-green-400">✅</span>
                   <span className="text-green-200 text-sm font-medium">Wallet Connected Successfully!</span>
-                </div>
+                          </div>
                 <p className="text-xs text-green-300 mt-1">
                   You can now proceed with NFT verification below
                 </p>
-              </div>
+                          </div>
             )}
-          </div>
-          
+                        </div>
+
           {connectionAttempts >= 15 && (
             <div className="flex justify-center mt-3 space-x-2">
-              <button
+                      <button 
                 onClick={() => {
                   setMobileWalletConnecting(false);
                   setConnectionAttempts(0);
@@ -2478,17 +2236,17 @@ function WalletPanel({ onVerify }) {
                 className="inline-flex items-center px-3 py-1 bg-blue-600/80 text-white text-xs rounded-lg hover:bg-blue-500/80 transition-colors"
               >
                 🔄 Reset Connection
-              </button>
-              <button
+                      </button>
+                      <button 
                 onClick={() => window.location.reload()}
                 className="inline-flex items-center px-3 py-1 bg-green-600/80 text-white text-xs rounded-lg hover:bg-green-500/80 transition-colors"
               >
                 🔄 Refresh Page
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+                      </button>
+                  </div>
+                )}
+              </div>
+            )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mt-6 md:mt-8">
@@ -2513,12 +2271,12 @@ function WalletPanel({ onVerify }) {
           icon="🎨"
           gradient="gradient-success"
         />
-      </div>
+                    </div>
 
       {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row gap-3 md:gap-4 mt-6 md:mt-8">
         {/* Verify NFT Button */}
-        <button
+                  <button 
           onClick={() => doVerify(DEFAULT_COLLECTION, tgId)}
           disabled={verifying}
           className="btn btn-success flex-1 text-sm md:text-base px-4 md:px-6 py-3 md:py-4"
@@ -2527,13 +2285,13 @@ function WalletPanel({ onVerify }) {
             <div className="flex items-center space-x-2">
               <div className="animate-spin rounded-full h-4 w-4 md:h-5 md:w-5 border-b-2 border-white"></div>
               <span>Verifying...</span>
-            </div>
+                    </div>
           ) : (
             "Verify NFT & Request Access"
           )}
-        </button>
-      </div>
-    </div>
+                  </button>
+                </div>
+              </div>
   );
 }
 
@@ -2548,89 +2306,79 @@ function App() {
   ];
 
   return (
-    <PhantomProvider
-      config={{
-        providerType: "embedded",
-        embeddedWalletType: "user-wallet",
-        addressTypes: [AddressType.solana],
-        apiBaseUrl: "https://api.phantom.app/v1/wallets",
-        organizationId: "meta-betties-nft-verification"
-      }}
-    >
-      <ConnectionProvider endpoint={RPC_ENDPOINT}>
-        <WalletProvider wallets={wallets} autoConnect={false}>
-          <WalletModalProvider>
-            <div className="App">
-              <header className="App-header">
-                <div className="container mx-auto px-4 py-8">
-                  <WalletPanel />
-                </div>
-              </header>
-              
-              {/* Professional Footer */}
-              <footer className="mt-16 py-8 border-t border-white/10">
-        
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    
-                  
-                  {/* Bottom Bar */}
-                  <div className="mt-8 pt-6 border-t border-white/10 text-center">
-                    <p className="text-white/50 text-sm">
-                      © 2025 Meta Betties. All rights reserved. | 
+    <ConnectionProvider endpoint={RPC_ENDPOINT}>
+      <WalletProvider wallets={wallets} autoConnect={false}>
+        <WalletModalProvider>
+          <div className="App">
+            <header className="App-header">
+              <div className="container mx-auto px-4 py-8">
+                <WalletPanel />
+                          </div>
+            </header>
             
-                    </p>
-                      
-                      {/* Developer Credit - Invisible and Locked */}
-                      <div 
-                        className="developer-credit-locked opacity-0 pointer-events-none select-none"
-                        data-protection="developer-credit-backup"
-                        style={{
-                          position: 'absolute',
-                          left: '-9999px',
-                          visibility: 'hidden',
-                          display: 'none'
-                        }}
-                      >
-                        <p className="text-transparent text-xs">
-                          Developed by{' '}
-                          <a 
-                            href="https://i-am-mushfiqur.netlify.app/" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-transparent hover:text-transparent"
-                          >
-                            Mushfiqur Rahman
-                          </a>
-                        </p>
-                  </div>
-                      
-                      {/* Visible Developer Credit - Subtle but Protected */}
-                      <div 
-                        className="developer-credit-locked mt-2 opacity-30 hover:opacity-60 transition-opacity duration-300"
-                        data-protection="developer-credit-visible"
-                      >
-                        <p className="text-white/30 text-xs">
-                          Crafted with ❤️ by{' '}
-                          <a 
-                            href="https://i-am-mushfiqur.netlify.app/" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-white/40 hover:text-white/60 transition-colors underline decoration-dotted"
-                            title="Developer Portfolio"
-                          >
-                            Mushfiqur Rahman
-                          </a>
-                        </p>
-                  </div>
-                    </div>
-                  </div>
-                </footer>
+            {/* Professional Footer */}
+            <footer className="mt-16 py-8 border-t border-white/10">
+    
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  
+                
+                {/* Bottom Bar */}
+                <div className="mt-8 pt-6 border-t border-white/10 text-center">
+                  <p className="text-white/50 text-sm">
+                    © 2025 Meta Betties. All rights reserved. | 
+      
+                  </p>
+                    
+                    {/* Developer Credit - Invisible and Locked */}
+                    <div 
+                      className="developer-credit-locked opacity-0 pointer-events-none select-none"
+                      data-protection="developer-credit-backup"
+                      style={{
+                        position: 'absolute',
+                        left: '-9999px',
+                        visibility: 'hidden',
+                        display: 'none'
+                      }}
+                    >
+                      <p className="text-transparent text-xs">
+                        Developed by{' '}
+                        <a 
+                          href="https://i-am-mushfiqur.netlify.app/" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-transparent hover:text-transparent"
+                        >
+                          Mushfiqur Rahman
+                        </a>
+                      </p>
+              </div>
+                    
+                    {/* Visible Developer Credit - Subtle but Protected */}
+                    <div 
+                      className="developer-credit-visible mt-2 opacity-30 hover:opacity-60 transition-opacity duration-300"
+                      data-protection="developer-credit-visible"
+                    >
+                      <p className="text-white/30 text-xs">
+                        Crafted with ❤️ by{' '}
+                        <a 
+                          href="https://i-am-mushfiqur.netlify.app/" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-white/40 hover:text-white/60 transition-colors underline decoration-dotted"
+                          title="Developer Portfolio"
+                        >
+                          Mushfiqur Rahman
+                        </a>
+                      </p>
+              </div>
+              </div>
             </div>
-          </WalletModalProvider>
-        </WalletProvider>
-      </ConnectionProvider>
-    </PhantomProvider>
+            </footer>
+          </div>
+        </WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
   );
 }
 
-export default App;
+export default App; 
